@@ -26,4 +26,18 @@ In a host repo (e.g. `maine-probate-forms`) subclass `MaineProbateAdapter` to re
 that repo's full per-form `statutes.json` instead of the bundled examples; the
 protocol is identical.
 
+## Verification packets
+
+This adapter feeds the linking layer directly:
+
+```bash
+hallucheck sources --adapter maine --cite "2000 ME 17"
+hallucheck pack    --adapter maine --draft brief.txt --no-fetch --format pdf --out authorities.pdf
+```
+
+`pack` resolves each cite to its bundled/live text (proof), attaches read/verify
+links (legislature.maine.gov, Google Scholar, CourtListener, Internet Archive, and
+labeled Westlaw/Lexis/Fastcase·vLex portals), and renders a bookmarked authorities
+appendix for **attorney review**. It does not determine negative treatment.
+
 **Not legal advice.**

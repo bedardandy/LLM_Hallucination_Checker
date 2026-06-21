@@ -8,7 +8,15 @@ whether the conclusion is actually supported — and attach tamper-evident proof
 that the check ran.
 
 > Corpus-agnostic core + pluggable adapters. A complete **Maine probate law**
-> adapter ships as a reference. Not legal advice.
+> adapter ships as a reference.
+
+> ⚠️ **EXPERIMENTAL — NOT LEGAL ADVICE.** This is experimental, AI/LLM-assisted
+> software. It helps *surface and organize* citations for human review; it does
+> **not** verify that an authority is correctly characterized, in force, or still
+> good law, and it **cannot determine negative treatment**. Use **extreme
+> caution** before relying on it in any production or client-facing system, and
+> **never** rely on output that a **licensed attorney** has not independently
+> reviewed. See [`DISCLAIMER.md`](DISCLAIMER.md).
 
 ## Why this works
 
@@ -30,6 +38,7 @@ that the check ran.
 | **Scan** for cites written outside the protocol, unresolvable cites, fabricated URLs | `hallucheck.scan` | offline |
 | **Dead-link** detection (DEAD ≠ BLOCKED: only 404/410/NXDOMAIN fail) | `hallucheck.links` | network |
 | **Attest** — signed, hash-chained receipts proving the check ran | `hallucheck.attest` | offline |
+| **Link & verify** — source links + a packet that *proves the cited text exists*, rendered to MD/HTML/DOCX/PDF for attorney review | `hallucheck.sources` · `hallucheck.research` · `hallucheck.embed` | offline* |
 
 ## Quickstart (Maine adapter)
 
@@ -72,6 +81,43 @@ chained into an append-only log (each entry pins the prior line's hash).
 `verify --input` binds a receipt to the exact text; `verify-log` catches
 tampering or reordering. A receipt proves the guard *ran and what it found*; only
 the **fail-closed** hook/proxy proves the agent *heeded* a failure.
+
+## Link, verify & Shepardize (for attorney review)
+
+Catching a fabricated cite is half the job; an attorney still has to *read the
+authority* and confirm it says what it's cited for and is still good law. The
+linking layer assembles that review packet — and, crucially, **embeds proof the
+cited text exists**: the real source text, its SHA-256, and durable links.
+
+```bash
+# every place to read/verify one citation (free, subscription, bar-membership)
+hallucheck sources --adapter maine --cite "457 A.2d 1123"
+
+# build an "authorities appendix" from a brief — internal bookmarks let each
+# citation jump to the section showing its source text + recorded treatment
+pip install -e ".[docs]"        # adds python-docx + reportlab for DOCX/PDF
+hallucheck pack --adapter maine --draft brief.txt --no-fetch \
+    --format pdf --out authorities.pdf
+hallucheck pack --adapter maine --draft brief.txt --treatments treatments.json \
+    --format docx --out authorities.docx
+```
+
+Each authority in the packet (MD/HTML/DOCX/PDF) carries: the **source text** with
+its hash (proof); **read/verify links** — official source, Google Scholar,
+CourtListener (a deep citation link for reporter cites), web search, and an
+**Internet Archive "save snapshot"** link to capture timestamped proof — plus
+clearly-labeled **subscription** (Westlaw, Lexis) and **bar-membership** portals
+(Maine/NH/MA bar → Fastcase·vLex; many Maine attorneys hold all three); the
+attorney's **treatment** findings (cross-linked to the next authority, so a
+negative-treatment note links onward); and **related authorities**.
+
+It does **not** decide whether a case is good law — negative treatment can't be
+derived from a closed corpus. The attorney records that in `treatments.json`
+(`{cite: {status, note, reviewed_by, authorities}}`), which the packet renders as
+first-class, cross-linked entries. Subscription/bar entries are never guessed deep
+links — just the service's real portal plus the citation to paste. The
+[`brief-shepardizer`](.claude/skills/brief-shepardizer/SKILL.md) Claude Code skill
+drives this workflow end to end.
 
 ## Threat model
 

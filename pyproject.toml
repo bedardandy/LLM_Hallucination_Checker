@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-hallucination-checker"
-version = "0.1.0"
+version = "0.2.0"
 description = "Force closed-vocabulary citations, substitute the real source text, and inspect whether each conclusion is actually supported — with dead-link detection, tamper-evident attestation, and harness guards."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ dependencies = []                      # core is stdlib-only
 
 [project.optional-dependencies]
 llm = ["openai>=1.40"]                  # only needed for the inspector LLM call
+docs = ["python-docx>=1.1", "reportlab>=4.0"]   # DOCX/PDF verification packets
 dev = ["pytest>=7"]
 
 [project.scripts]
