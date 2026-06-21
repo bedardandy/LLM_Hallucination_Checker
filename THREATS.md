@@ -84,6 +84,16 @@ auditor) confirm the text an analysis relied on, and capture durable, timestampe
 proof of it — but it attests to *what the source said*, not to whether the source
 was correctly *used* (that is the inspector LLM's job) or is still good law.
 
+## Network & file-surface security
+
+The opt-in network/file features are hardened (see [`SECURITY.md`](SECURITY.md)):
+opinion downloads (`courtlistener.fetch_file` / `pack --fetch-opinions`) run
+behind an **SSRF guard** (http(s)-only; rejects `file://`/`ftp://` and hosts
+resolving to private/loopback/link-local/metadata addresses), **size caps** on
+API responses and downloads, **path-safe** output names (sanitized anchor +
+allow-listed extension), and **escaped** HTML/PDF/DOCX output. Residual:
+DNS-rebinding between the SSRF check and the connect.
+
 ## Posture
 
 Deterministic findings (gates, scanner, URLs, dead links) are **fail-closed and
