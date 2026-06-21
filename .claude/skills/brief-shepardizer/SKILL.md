@@ -58,6 +58,16 @@ rendered document — keep it there.
    scanner. Formats: `md`, `html`, `docx`, `pdf`, `json`. DOCX/PDF need the extra:
    `pip install 'llm-hallucination-checker[docs]'`.
 
+   Opt-in network enrichment for cases (free CourtListener API; set
+   `COURTLISTENER_TOKEN` to raise rate limits):
+   ```bash
+   hallucheck cl-lookup --cite "2000 ME 17"          # resolve one cite to its opinion
+   hallucheck pack ... --courtlistener               # add live opinion links/excerpts
+   hallucheck pack ... --fetch-opinions ./opinions   # download opinion files + link them
+   ```
+   A CourtListener hit is a **lead, not a verification** — confirm it is the right
+   case and still good law.
+
 4. **Record the attorney's treatment** (the Shepardize result) in a JSON file and
    pass `--treatments`. An authority listed under `authorities` that is also in the
    packet is auto-linked, so a negative-treatment note links onward to the next

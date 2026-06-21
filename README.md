@@ -93,19 +93,26 @@ cited text exists**: the real source text, its SHA-256, and durable links.
 # every place to read/verify one citation (free, subscription, bar-membership)
 hallucheck sources --adapter maine --cite "457 A.2d 1123"
 
+# resolve a case to its real CourtListener opinion (free API; opt-in network)
+hallucheck cl-lookup --cite "457 A.2d 1123"
+
 # build an "authorities appendix" from a brief — internal bookmarks let each
 # citation jump to the section showing its source text + recorded treatment
 pip install -e ".[docs]"        # adds python-docx + reportlab for DOCX/PDF
 hallucheck pack --adapter maine --draft brief.txt --no-fetch \
     --format pdf --out authorities.pdf
 hallucheck pack --adapter maine --draft brief.txt --treatments treatments.json \
-    --format docx --out authorities.docx
+    --courtlistener --format docx --out authorities.docx   # + live opinion links
+hallucheck pack --adapter maine --draft brief.txt \
+    --fetch-opinions ./opinions --format pdf --out authorities.pdf  # download files
 ```
 
 Each authority in the packet (MD/HTML/DOCX/PDF) carries: the **source text** with
 its hash (proof); **read/verify links** — official source, Google Scholar,
 CourtListener (a deep citation link for reporter cites), web search, and an
-**Internet Archive "save snapshot"** link to capture timestamped proof — plus
+**Internet Archive "save snapshot"** link to capture timestamped proof; an opt-in
+**CourtListener** lookup (`--courtlistener`) that resolves a case to its *real
+opinion* (and `--fetch-opinions` downloads the file into the appendix) — plus
 clearly-labeled **subscription** (Westlaw, Lexis) and **bar-membership** portals
 (Maine/NH/MA bar → Fastcase·vLex; many Maine attorneys hold all three); the
 attorney's **treatment** findings (cross-linked to the next authority, so a

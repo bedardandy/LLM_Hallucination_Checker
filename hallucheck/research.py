@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import datetime
 
-from . import attest, sources
+from . import attest, courtlistener, sources
 from .disclaimer import LIBRARY_DISCLAIMER, combined
 from .textnorm import clean
 
@@ -119,11 +119,17 @@ def _relate(entries: list[dict]) -> None:
 
 def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None = None,
                  scope: str | None = None, fetch_text: bool = True,
-                 treatments: dict | None = None, title: str | None = None) -> dict:
+                 treatments: dict | None = None, title: str | None = None,
+                 courtlistener_lookup: bool = False, cl_token: str | None = None,
+                 cl_http=None, cl_timeout: int = 20) -> dict:
     """Build a verification packet from an explicit ``cites`` list and/or the
     citations found in ``draft``. ``fetch_text=False`` keeps it fully offline
     (uses the adapter's offline authority text). ``treatments`` maps a cite to an
-    attorney-recorded ``{status, note, authorities:[{cite|url,label}]}``."""
+    attorney-recorded ``{status, note, authorities:[{cite|url,label}]}``.
+
+    ``courtlistener_lookup=True`` opts into a network call per case citation to
+    attach the CourtListener opinion link/excerpt (``cl_token`` raises rate
+    limits; ``cl_http`` injects the HTTP layer for tests)."""
     vocab = {}
     try:
         vocab = adapter.build_vocabulary(scope)
@@ -158,12 +164,18 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
             if a.get("cite") in by_cite and not a.get("anchor"):
                 a["anchor"] = by_cite[a["cite"]]["anchor"]
 
+    if courtlistener_lookup:
+        for e in entries:
+            courtlistener.enrich(e, token=cl_token, http=cl_http, timeout=cl_timeout)
+
     counts = {
         "total": len(entries),
         "resolved": sum(1 for e in entries if e["resolved"]),
         "unresolved": sum(1 for e in entries if not e["resolved"] and not e["dead_link"]),
         "dead_links": sum(1 for e in entries if e["dead_link"]),
         "treated": sum(1 for e in entries if e["treatment"]["status"] != "unreviewed"),
+        "courtlistener": sum(1 for e in entries
+                             if (e.get("courtlistener") or {}).get("found")),
     }
     return {
         "schema": SCHEMA,
@@ -180,6 +192,38 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
         "unverified": sorted(e["cite"] for e in entries if not e["resolved"]),
         "entries": entries,
     }
+
+
+def attach_opinions(packet: dict, dest_dir, *, token: str | None = None,
+                    http=None, fetch=None) -> int:
+    """Download the available opinion file for each CourtListener-resolved case
+    entry into ``dest_dir`` and add a local link. Network; requires a packet built
+    with ``courtlistener_lookup=True``. Returns the number of files saved; never
+    raises (a failed download just adds no local link). ``http``/``fetch`` are
+    injectable for tests."""
+    import pathlib
+    fetch = fetch or courtlistener.fetch_file
+    dest = pathlib.Path(dest_dir)
+    saved = 0
+    for e in packet.get("entries", []):
+        cl = e.get("courtlistener") or {}
+        if not (cl.get("found") and cl.get("opinion_id")):
+            continue
+        try:
+            det = courtlistener.opinion(cl["opinion_id"], token=token, http=http)
+            file_url = det.get("file_url")
+            if not file_url:
+                continue
+            ext = pathlib.Path(file_url.split("?")[0]).suffix or ".pdf"
+            out = dest / f"{e['anchor']}{ext}"
+            fetch(file_url, str(out), token=token)
+            e["sources"]["links"].append(
+                {"provider": "local_opinion_file", "access": "free",
+                 "label": "Downloaded opinion file", "url": str(out)})
+            saved += 1
+        except Exception:                                # noqa: BLE001
+            continue
+    return saved
 
 
 def _safe_digest(adapter):
