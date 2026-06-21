@@ -18,7 +18,7 @@ import pathlib
 import sys
 
 from . import adapter as _adapter
-from . import attest, embed, inspector, links, research, scan, sources
+from . import attest, courtlistener, embed, inspector, links, research, scan, sources
 
 
 def _read(path_or_dash: str | None) -> str:
@@ -72,6 +72,15 @@ def main(argv=None) -> int:
     pk.add_argument("--title")
     pk.add_argument("--no-fetch", action="store_true",
                     help="offline: use the adapter's bundled text, don't fetch source URLs")
+    pk.add_argument("--courtlistener", action="store_true",
+                    help="network: attach the CourtListener opinion link/excerpt per case")
+    pk.add_argument("--fetch-opinions", metavar="DIR",
+                    help="network: download available opinion files into DIR and link them "
+                         "(implies --courtlistener)")
+
+    cl = sub.add_parser("cl-lookup")
+    cl.add_argument("--cite", required=True)
+    cl.add_argument("--json", action="store_true")
 
     v = sub.add_parser("verify"); v.add_argument("receipt"); v.add_argument("--input")
     vl = sub.add_parser("verify-log"); vl.add_argument("log")
@@ -89,6 +98,18 @@ def main(argv=None) -> int:
         for p in problems:
             print("  - " + p, file=sys.stderr)
         return 0 if ok else 1
+    if a.cmd == "cl-lookup":
+        import os
+        res = courtlistener.lookup(a.cite, token=os.environ.get("COURTLISTENER_TOKEN"))
+        if a.json:
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+        elif res.get("found"):
+            print(f"{res['case_name']} — {res['court']}, {res['date']}")
+            print(f"  citations: {', '.join(res['citations'])}")
+            print(f"  opinion:   {res['absolute_url']}")
+        else:
+            print(f"not found: {a.cite}" + (f" ({res['error']})" if res.get("error") else ""))
+        return 0 if res.get("found") else 1
 
     adapter = _adapter.load(a.adapter)
 
@@ -119,12 +140,19 @@ def main(argv=None) -> int:
                 print(f"  [{p['access']:8}] {p['label']}: {p['portal_url']}  (login; search: {p['query']})")
         return 0
     if a.cmd == "pack":
+        import os
         treatments = (json.loads(pathlib.Path(a.treatments).read_text(encoding="utf-8"))
                       if a.treatments else None)
         draft = _read(a.draft) if a.draft else None
+        token = os.environ.get("COURTLISTENER_TOKEN")
+        use_cl = a.courtlistener or bool(a.fetch_opinions)
         packet = research.build_packet(adapter, cites=a.cite or None, draft=draft,
                                        scope=a.scope, fetch_text=not a.no_fetch,
-                                       treatments=treatments, title=a.title)
+                                       treatments=treatments, title=a.title,
+                                       courtlistener_lookup=use_cl, cl_token=token)
+        if a.fetch_opinions:
+            n = research.attach_opinions(packet, a.fetch_opinions, token=token)
+            print(f"downloaded {n} opinion file(s) -> {a.fetch_opinions}", file=sys.stderr)
         if a.format == "json":
             payload = json.dumps(packet, indent=2, ensure_ascii=False)
             (pathlib.Path(a.out).write_text(payload, encoding="utf-8") if a.out else print(payload))

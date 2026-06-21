@@ -66,6 +66,12 @@ in `test_integration.py` (the proxy test runs a real HTTP round-trip).
    **not** guess Westlaw/Lexis/Fastcase document URLs — those are returned as
    labeled `requires_login` portals. A returned link being reachable does not mean
    it points at the right document; the attorney must confirm.
+8. **CourtListener match is a lead, not a verification.** The opt-in
+   `--courtlistener` lookup picks the best search hit (preferring an exact
+   citation match) from a free third-party database; it can return the wrong case,
+   a superseded version, or nothing. It is network- and availability-dependent,
+   never runs unless requested, and degrades to "not found" on any error. Confirm
+   the opinion is the right one and still good law before relying on it.
 
 ## Proving the text exists
 

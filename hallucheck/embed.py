@@ -112,6 +112,13 @@ def to_markdown(packet: dict) -> str:
         else:
             L.append(f"> **{_status(e)}**")
         L.append("")
+        cl = e.get("courtlistener") or {}
+        if cl.get("found"):
+            L.append(f"**CourtListener:** {cl.get('case_name') or ''} — "
+                     f"{cl.get('court') or ''}, {cl.get('date') or ''}")
+            if cl.get("snippet"):
+                L.append("> " + " ".join(cl["snippet"].split()))
+            L.append("")
         t = e["treatment"]
         L.append(f"**Treatment:** `{t['status']}`"
                  + (f" — {t['note']}" if t.get("note") else "")
@@ -214,6 +221,12 @@ def to_html(packet: dict) -> str:
         else:
             cls = "status-dead" if e["dead_link"] else "status-unresolved"
             out.append(f'<p class="{cls}">{_h(_status(e))}</p>')
+        cl = e.get("courtlistener") or {}
+        if cl.get("found"):
+            out.append(f'<p class="meta"><b>CourtListener:</b> {_h(cl.get("case_name"))} — '
+                       f'{_h(cl.get("court"))}, {_h(cl.get("date"))}</p>')
+            if cl.get("snippet"):
+                out.append(f'<blockquote>{_h(" ".join(cl["snippet"].split()))}</blockquote>')
         t = e["treatment"]
         treat = (f'<div class="treat"><b>Treatment:</b> <code>{_h(t["status"])}</code>'
                  + (f' — {_h(t["note"])}' if t.get("note") else "")
@@ -321,6 +334,14 @@ def to_docx(packet: dict, path: str):
             q = doc.add_paragraph(e["text"]); q.style = "Quote"
         else:
             doc.add_paragraph().add_run(_status(e)).bold = True
+
+        cl = e.get("courtlistener") or {}
+        if cl.get("found"):
+            clp = doc.add_paragraph(); clp.add_run("CourtListener: ").bold = True
+            clp.add_run(f"{cl.get('case_name') or ''} — {cl.get('court') or ''}, "
+                        f"{cl.get('date') or ''}")
+            if cl.get("snippet"):
+                doc.add_paragraph(" ".join(cl["snippet"].split())).style = "Quote"
 
         t = e["treatment"]
         tp = doc.add_paragraph()
@@ -430,6 +451,12 @@ def to_pdf(packet: dict, path: str):
             story.append(Paragraph(esc(e["text"]).replace("\n", "<br/>"), quote))
         else:
             story.append(Paragraph(f'<b><font color="#9a0007">{esc(_status(e))}</font></b>', body))
+        cl = e.get("courtlistener") or {}
+        if cl.get("found"):
+            story.append(Paragraph(f"<b>CourtListener:</b> {esc(cl.get('case_name'))} — "
+                                   f"{esc(cl.get('court'))}, {esc(cl.get('date'))}", body))
+            if cl.get("snippet"):
+                story.append(Paragraph(esc(" ".join(cl["snippet"].split())), quote))
         t = e["treatment"]
         tline = (f'<b>Treatment:</b> {esc(t["status"])}'
                  + (f' — {esc(t["note"])}' if t.get("note") else "")
