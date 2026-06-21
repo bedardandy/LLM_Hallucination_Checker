@@ -58,8 +58,11 @@ in `test_integration.py` (the proxy test runs a real HTTP round-trip).
    hash so an attorney *can* review a cite, but it **cannot** decide whether a case
    was overruled, reversed, or limited — that requires a citator (Westlaw
    KeyCite / Lexis Shepard's / Fastcase) and human judgment. The packet provides
-   the portals (with the citation to paste) and a `treatments.json` slot for the
-   attorney's findings; it never fabricates a treatment or a verdict.
+   the portals (with the citation to paste), an opt-in CourtListener `--citing`
+   list of the later opinions that cite each case (the cited-by references to
+   review, most-recent first), and a `treatments.json` slot for the attorney's
+   findings; it surfaces who-cites-what but never decides whether the treatment is
+   negative, and never fabricates a treatment or a verdict.
 7. **Link construction is conservative, not exhaustive.** `hallucheck.sources`
    emits only links it can build from stable patterns (an adapter-vouched official
    URL, a search query, a reporter-cite redirect, an archive snapshot). It does

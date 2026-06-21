@@ -61,12 +61,15 @@ rendered document — keep it there.
    Opt-in network enrichment for cases (free CourtListener API; set
    `COURTLISTENER_TOKEN` to raise rate limits):
    ```bash
-   hallucheck cl-lookup --cite "2000 ME 17"          # resolve one cite to its opinion
+   hallucheck cl-lookup --cite "2000 ME 17" --citing 5   # opinion + later citing cases
    hallucheck pack ... --courtlistener               # add live opinion links/excerpts
+   hallucheck pack ... --citing 5                     # + cited-by list for treatment review
    hallucheck pack ... --fetch-opinions ./opinions   # download opinion files + link them
    ```
-   A CourtListener hit is a **lead, not a verification** — confirm it is the right
-   case and still good law.
+   `--citing N` lists the N most-recent opinions that cite each case — the
+   references to review for negative treatment (it lists *who cites it*, never
+   whether the treatment is negative). A CourtListener hit is a **lead, not a
+   verification** — confirm it is the right case and still good law.
 
 4. **Record the attorney's treatment** (the Shepardize result) in a JSON file and
    pass `--treatments`. An authority listed under `authorities` that is also in the

@@ -1,6 +1,8 @@
 """CourtListener enrichment — deterministic, offline (HTTP layer is injected)."""
 import json
 
+import pytest
+
 from adapters.maine.adapter import MaineProbateAdapter
 from hallucheck import courtlistener, embed, research
 
@@ -11,21 +13,30 @@ _SEARCH = {
         "citation": ["457 A.2d 1123", "1983 Me. LEXIS 667"],
         "court": "Supreme Judicial Court of Maine",
         "dateFiled": "1983-04-05",
+        "citeCount": 10,
         "absolute_url": "/opinion/1955225/estate-of-bonin/",
         "cluster_id": 1955225,
         "opinions": [{"id": 1955225, "download_url": None,
                       "snippet": "457 A.2d 1123 (1983)\nESTATE OF Ernest F. BONIN, Sr."}],
     }],
 }
+_CITING = {"count": 2, "results": [
+    {"caseName": "Later Case A", "court": "Me.", "dateFiled": "2010-01-01",
+     "citation": ["2010 ME 1"], "absolute_url": "/opinion/111/later-a/"},
+    {"caseName": "Later Case B", "court": "Me.", "dateFiled": "2005-01-01",
+     "citation": ["2005 ME 9"], "absolute_url": "/opinion/222/later-b/"},
+]}
 _OPINION = {"plain_text": "PER CURIAM. ...", "download_url": None,
             "local_path": "pdf/1983/estate-of-bonin.pdf"}
 
 
 def fake_http(url, *, timeout=20, token=None):
-    if "/search/" in url:
-        return json.dumps(_SEARCH)
     if "/opinions/" in url:
         return json.dumps(_OPINION)
+    if "cites" in url:                      # q=cites:(<id>) -> citing-opinions search
+        return json.dumps(_CITING)
+    if "/search/" in url:
+        return json.dumps(_SEARCH)
     raise AssertionError(f"unexpected url {url}")
 
 
@@ -41,6 +52,34 @@ def test_lookup_parses_real_shape():
     assert r["absolute_url"] == "https://www.courtlistener.com/opinion/1955225/estate-of-bonin/"
     assert "457 A.2d 1123" in r["citations"]
     assert r["snippet"]
+
+
+def test_lookup_includes_cite_count():
+    r = courtlistener.lookup("457 A.2d 1123", http=fake_http)
+    assert r["cite_count"] == 10
+
+
+def test_citing_lists_recent_first_and_truncates():
+    c = courtlistener.citing(1955225, limit=1, http=fake_http)
+    assert c["count"] == 2
+    assert len(c["opinions"]) == 1                       # truncated to limit
+    o = c["opinions"][0]
+    assert o["case_name"] == "Later Case A"
+    assert o["absolute_url"] == "https://www.courtlistener.com/opinion/111/later-a/"
+    assert "cites:(1955225)" in c["search_url"]
+
+
+def test_citing_never_raises():
+    c = courtlistener.citing(1, http=boom_http)
+    assert c == {"count": 0, "opinions": [], "error": c["error"]}
+    assert "OSError" in c["error"]
+
+
+def test_enrich_attaches_citing_when_requested():
+    case = {"cite": "457 A.2d 1123", "kind": "case",
+            "sources": {"links": [], "portals": []}}
+    courtlistener.enrich(case, http=fake_http, citing_limit=2)
+    assert len(case["courtlistener"]["citing"]["opinions"]) == 2
 
 
 def test_lookup_no_results():
@@ -79,6 +118,32 @@ def test_build_packet_with_courtlistener_and_rendering():
     assert "Estate of Bonin" in md
     htmls = embed.to_html(pkt)
     assert "courtlistener.com/opinion/1955225" in htmls
+
+
+def test_packet_citing_renders_treatment_review_block():
+    pkt = research.build_packet(MaineProbateAdapter(), cites=["457 A.2d 1123"],
+                                fetch_text=False, courtlistener_lookup=True,
+                                cl_http=fake_http, cl_citing_limit=2)
+    e = pkt["entries"][0]
+    assert e["courtlistener"]["citing"]["count"] == 2
+    md = embed.to_markdown(pkt)
+    assert "Cited by ~2 later opinion(s)" in md
+    assert "review for negative treatment" in md
+    assert "Later Case A" in md
+    htmls = embed.to_html(pkt)
+    assert "courtlistener.com/opinion/111/later-a/" in htmls
+
+
+def test_citing_packet_renders_docx_and_pdf(tmp_path):
+    pkt = research.build_packet(MaineProbateAdapter(), cites=["457 A.2d 1123"],
+                                fetch_text=False, courtlistener_lookup=True,
+                                cl_http=fake_http, cl_citing_limit=2)
+    pytest.importorskip("docx")
+    embed.to_docx(pkt, str(tmp_path / "a.docx"))
+    pytest.importorskip("reportlab")
+    p = tmp_path / "a.pdf"
+    embed.to_pdf(pkt, str(p))
+    assert p.read_bytes().startswith(b"%PDF")
 
 
 def test_attach_opinions_downloads_and_links(tmp_path):
