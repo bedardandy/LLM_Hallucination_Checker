@@ -8,6 +8,8 @@ A Maine probate adapter ships under ``adapters/maine`` as a reference.
 
 Not legal advice.
 """
-from . import adapter, attest, guard, inspector, links, scan      # noqa: F401
+from . import (adapter, attest, embed, guard, inspector, links,   # noqa: F401
+               research, scan, sources)
+from .disclaimer import LIBRARY_DISCLAIMER, SHORT_DISCLAIMER       # noqa: F401
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

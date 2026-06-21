@@ -4,6 +4,9 @@
     hallucheck inspect      --adapter maine --scope DE-101 --draft draft.txt --attest
     hallucheck scan         --adapter maine --scope DE-101 --draft draft.txt
     hallucheck links        --adapter maine --check
+    hallucheck sources      --adapter maine --cite "2000 ME 17"
+    hallucheck pack         --adapter maine --scope DE-101 --draft brief.txt \
+                            --format pdf --out authorities.pdf
     hallucheck verify       receipt.json --input draft.txt
     hallucheck verify-log   inspection_log.jsonl
 """
@@ -15,7 +18,7 @@ import pathlib
 import sys
 
 from . import adapter as _adapter
-from . import attest, inspector, links, scan
+from . import attest, embed, inspector, links, research, scan, sources
 
 
 def _read(path_or_dash: str | None) -> str:
@@ -51,6 +54,25 @@ def main(argv=None) -> int:
             sp.add_argument("--check", action="store_true")
             sp.add_argument("--scope-mode", default="used", choices=["used", "all"])
         sp.add_argument("--json", action="store_true")
+
+    src = sub.add_parser("sources")
+    src.add_argument("--adapter", required=True)
+    src.add_argument("--cite", required=True)
+    src.add_argument("--scope")
+    src.add_argument("--json", action="store_true")
+
+    pk = sub.add_parser("pack")
+    pk.add_argument("--adapter", required=True)
+    pk.add_argument("--scope")
+    pk.add_argument("--draft", help="brief to extract citations from (file or '-')")
+    pk.add_argument("--cite", action="append", default=[], help="add a citation (repeatable)")
+    pk.add_argument("--format", default="md", choices=["md", "html", "docx", "pdf", "json"])
+    pk.add_argument("--out", help="output file (required for docx/pdf)")
+    pk.add_argument("--treatments", help="JSON file: {cite: {status, note, authorities}}")
+    pk.add_argument("--title")
+    pk.add_argument("--no-fetch", action="store_true",
+                    help="offline: use the adapter's bundled text, don't fetch source URLs")
+
     v = sub.add_parser("verify"); v.add_argument("receipt"); v.add_argument("--input")
     vl = sub.add_parser("verify-log"); vl.add_argument("log")
     a = ap.parse_args(argv)
@@ -82,6 +104,37 @@ def main(argv=None) -> int:
             for u in rep["dead"]:
                 print(f"  DEAD  {u}  (cites: {', '.join(rep['results'][u]['cites'])})")
         return 1 if rep["dead"] else 0
+
+    if a.cmd == "sources":
+        meta = adapter.build_vocabulary(a.scope).get(a.cite, {"cite": a.cite})
+        rec = {"cite": a.cite, **{k: meta.get(k) for k in ("kind", "title", "url", "name")}}
+        out = sources.for_citation(rec)
+        if a.json:
+            print(json.dumps(out, indent=2, ensure_ascii=False))
+        else:
+            print(f"sources for {a.cite} ({out['kind']}):")
+            for ln in out["links"]:
+                print(f"  [{ln['access']:8}] {ln['label']}: {ln.get('url') or ln.get('view_url')}")
+            for p in out["portals"]:
+                print(f"  [{p['access']:8}] {p['label']}: {p['portal_url']}  (login; search: {p['query']})")
+        return 0
+    if a.cmd == "pack":
+        treatments = (json.loads(pathlib.Path(a.treatments).read_text(encoding="utf-8"))
+                      if a.treatments else None)
+        draft = _read(a.draft) if a.draft else None
+        packet = research.build_packet(adapter, cites=a.cite or None, draft=draft,
+                                       scope=a.scope, fetch_text=not a.no_fetch,
+                                       treatments=treatments, title=a.title)
+        if a.format == "json":
+            payload = json.dumps(packet, indent=2, ensure_ascii=False)
+            (pathlib.Path(a.out).write_text(payload, encoding="utf-8") if a.out else print(payload))
+        else:
+            rendered = embed.render(packet, a.format, path=a.out)
+            if a.format in ("md", "html") and not a.out:
+                print(rendered)
+        if a.out:
+            print(f"wrote {packet['counts']['total']} authorities -> {a.out}", file=sys.stderr)
+        return 1 if packet["unverified"] else 0
 
     text = _read(a.draft)
     if a.cmd == "scan":

@@ -53,6 +53,27 @@ in `test_integration.py` (the proxy test runs a real HTTP round-trip).
 5. **Index freshness.** Resolution is only as current as the bundled/host index; a
    section added upstream after the snapshot reads as `unresolvable` until the
    index is refreshed (see `tools/check_upstream.py` in the host repo).
+6. **Negative treatment / "is it still good law".** The verification packet
+   (`hallucheck.research` / `hallucheck.embed`) assembles source text + links + a
+   hash so an attorney *can* review a cite, but it **cannot** decide whether a case
+   was overruled, reversed, or limited — that requires a citator (Westlaw
+   KeyCite / Lexis Shepard's / Fastcase) and human judgment. The packet provides
+   the portals (with the citation to paste) and a `treatments.json` slot for the
+   attorney's findings; it never fabricates a treatment or a verdict.
+7. **Link construction is conservative, not exhaustive.** `hallucheck.sources`
+   emits only links it can build from stable patterns (an adapter-vouched official
+   URL, a search query, a reporter-cite redirect, an archive snapshot). It does
+   **not** guess Westlaw/Lexis/Fastcase document URLs — those are returned as
+   labeled `requires_login` portals. A returned link being reachable does not mean
+   it points at the right document; the attorney must confirm.
+
+## Proving the text exists
+
+The packet records each authority's source **text** and its **SHA-256**, and
+offers an Internet Archive *save-snapshot* link. That lets a reviewer (or a later
+auditor) confirm the text an analysis relied on, and capture durable, timestamped
+proof of it — but it attests to *what the source said*, not to whether the source
+was correctly *used* (that is the inspector LLM's job) or is still good law.
 
 ## Posture
 
