@@ -93,8 +93,8 @@ cited text exists**: the real source text, its SHA-256, and durable links.
 # every place to read/verify one citation (free, subscription, bar-membership)
 hallucheck sources --adapter maine --cite "457 A.2d 1123"
 
-# resolve a case to its real CourtListener opinion (free API; opt-in network)
-hallucheck cl-lookup --cite "457 A.2d 1123"
+# resolve a case to its opinion + the later opinions that cite it (treatment review)
+hallucheck cl-lookup --cite "457 A.2d 1123" --citing 5
 
 # build an "authorities appendix" from a brief — internal bookmarks let each
 # citation jump to the section showing its source text + recorded treatment
@@ -102,7 +102,7 @@ pip install -e ".[docs]"        # adds python-docx + reportlab for DOCX/PDF
 hallucheck pack --adapter maine --draft brief.txt --no-fetch \
     --format pdf --out authorities.pdf
 hallucheck pack --adapter maine --draft brief.txt --treatments treatments.json \
-    --courtlistener --format docx --out authorities.docx   # + live opinion links
+    --citing 5 --format docx --out authorities.docx   # + opinion + cited-by links
 hallucheck pack --adapter maine --draft brief.txt \
     --fetch-opinions ./opinions --format pdf --out authorities.pdf  # download files
 ```
@@ -112,7 +112,9 @@ its hash (proof); **read/verify links** — official source, Google Scholar,
 CourtListener (a deep citation link for reporter cites), web search, and an
 **Internet Archive "save snapshot"** link to capture timestamped proof; an opt-in
 **CourtListener** lookup (`--courtlistener`) that resolves a case to its *real
-opinion* (and `--fetch-opinions` downloads the file into the appendix) — plus
+opinion*, with `--citing N` listing the later opinions that cite it (the cited-by
+references an attorney reviews for negative treatment) and `--fetch-opinions`
+downloading the file into the appendix — plus
 clearly-labeled **subscription** (Westlaw, Lexis) and **bar-membership** portals
 (Maine/NH/MA bar → Fastcase·vLex; many Maine attorneys hold all three); the
 attorney's **treatment** findings (cross-linked to the next authority, so a

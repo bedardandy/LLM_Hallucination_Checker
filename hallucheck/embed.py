@@ -24,6 +24,17 @@ import html
 from .disclaimer import SHORT_DISCLAIMER
 
 
+def _citing_summary(cl: dict):
+    """``(n, search_url, [opinions])`` for the treatment-review block, or None when
+    there's nothing to show."""
+    citing = cl.get("citing") or {}
+    ops = citing.get("opinions") or []
+    n = citing.get("count", cl.get("cite_count"))
+    if not n and not ops:
+        return None
+    return n, citing.get("search_url"), ops
+
+
 def _status(entry: dict) -> str:
     if entry["dead_link"]:
         return "DEAD LINK — source URL unreachable; verify another way"
@@ -118,6 +129,16 @@ def to_markdown(packet: dict) -> str:
                      f"{cl.get('court') or ''}, {cl.get('date') or ''}")
             if cl.get("snippet"):
                 L.append("> " + " ".join(cl["snippet"].split()))
+            cs = _citing_summary(cl)
+            if cs:
+                n, su, ops = cs
+                line = f"**Cited by ~{n} later opinion(s)** — review for negative treatment"
+                if su:
+                    line += f" ([CourtListener search]({su}))"
+                L.append(line)
+                for o in ops:
+                    L.append(f"  - {o.get('date') or ''} — "
+                             f"[{o.get('case_name') or 'opinion'}]({o.get('absolute_url')})")
             L.append("")
         t = e["treatment"]
         L.append(f"**Treatment:** `{t['status']}`"
@@ -227,6 +248,18 @@ def to_html(packet: dict) -> str:
                        f'{_h(cl.get("court"))}, {_h(cl.get("date"))}</p>')
             if cl.get("snippet"):
                 out.append(f'<blockquote>{_h(" ".join(cl["snippet"].split()))}</blockquote>')
+            cs = _citing_summary(cl)
+            if cs:
+                n, su, ops = cs
+                head = f'<b>Cited by ~{_h(n)} later opinion(s)</b> — review for negative treatment'
+                if su:
+                    head += f' (<a href="{_h(su)}" target="_blank" rel="noopener">CourtListener search</a>)'
+                items = "".join(
+                    f'<li>{_h(o.get("date"))} — <a href="{_h(o.get("absolute_url"))}" '
+                    f'target="_blank" rel="noopener">{_h(o.get("case_name") or "opinion")}</a></li>'
+                    for o in ops)
+                out.append(f'<div class="treat">{head}'
+                           + (f"<ul>{items}</ul>" if items else "") + "</div>")
         t = e["treatment"]
         treat = (f'<div class="treat"><b>Treatment:</b> <code>{_h(t["status"])}</code>'
                  + (f' — {_h(t["note"])}' if t.get("note") else "")
@@ -342,6 +375,21 @@ def to_docx(packet: dict, path: str):
                         f"{cl.get('date') or ''}")
             if cl.get("snippet"):
                 doc.add_paragraph(" ".join(cl["snippet"].split())).style = "Quote"
+            cs = _citing_summary(cl)
+            if cs:
+                n, su, ops = cs
+                cp = doc.add_paragraph()
+                cp.add_run(f"Cited by ~{n} later opinion(s) — review for negative "
+                           f"treatment").bold = True
+                if su:
+                    cp.add_run("  "); external_link(cp, su, "CourtListener search")
+                for o in ops:
+                    op = doc.add_paragraph(style="List Bullet")
+                    op.add_run(f"{o.get('date') or ''} — ")
+                    if o.get("absolute_url"):
+                        external_link(op, o["absolute_url"], o.get("case_name") or "opinion")
+                    else:
+                        op.add_run(o.get("case_name") or "opinion")
 
         t = e["treatment"]
         tp = doc.add_paragraph()
@@ -457,6 +505,18 @@ def to_pdf(packet: dict, path: str):
                                    f"{esc(cl.get('court'))}, {esc(cl.get('date'))}", body))
             if cl.get("snippet"):
                 story.append(Paragraph(esc(" ".join(cl["snippet"].split())), quote))
+            cs = _citing_summary(cl)
+            if cs:
+                n, surl, ops = cs
+                head = f"<b>Cited by ~{esc(n)} later opinion(s)</b> — review for negative treatment"
+                if surl:
+                    head += f' (<a href="{esc(surl)}" color="blue">CourtListener search</a>)'
+                story.append(Paragraph(head, body))
+                for o in ops:
+                    nm = esc(o.get("case_name") or "opinion")
+                    link = (f'<a href="{esc(o["absolute_url"])}" color="blue">{nm}</a>'
+                            if o.get("absolute_url") else nm)
+                    story.append(Paragraph(f"• {esc(o.get('date'))} — {link}", body))
         t = e["treatment"]
         tline = (f'<b>Treatment:</b> {esc(t["status"])}'
                  + (f' — {esc(t["note"])}' if t.get("note") else "")

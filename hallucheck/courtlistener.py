@@ -63,12 +63,40 @@ def lookup(cite: str, *, timeout: int = 20, token: str | None = None, http=None)
         "court": best.get("court"),
         "date": best.get("dateFiled"),
         "citations": best.get("citation") or [],
+        "cite_count": best.get("citeCount"),             # later citations (treatment lead)
         "cluster_id": best.get("cluster_id"),
         "opinion_id": op.get("id"),
         "absolute_url": (BASE + rel) if rel else None,
         "download_url": op.get("download_url"),          # original court file (often null)
         "snippet": (op.get("snippet") or "").strip() or None,
     }
+
+
+def citing(opinion_id, *, limit: int = 5, timeout: int = 20, token: str | None = None,
+           http=None) -> dict:
+    """Later opinions that cite ``opinion_id``, most-recent first — the references
+    an attorney reviews for negative treatment.
+
+    Uses the free, anonymous search filter ``q=cites:(<id>)``. Returns
+    ``{count, opinions:[{case_name, court, date, citations, absolute_url}],
+    search_url}`` (truncated to ``limit``); ``{count:0, opinions:[], error}`` on
+    failure. This lists *who cites the case*, NOT whether the treatment is
+    negative — that judgment is the attorney's."""
+    http = http or _http
+    params = urlencode({"q": f"cites:({opinion_id})", "type": "o",
+                        "order_by": "dateFiled desc"})
+    try:
+        data = json.loads(http(f"{SEARCH}?{params}", timeout=timeout, token=token))
+    except Exception as e:                                # noqa: BLE001
+        return {"count": 0, "opinions": [], "error": f"{type(e).__name__}: {e}"}
+    out = []
+    for r in (data.get("results") or [])[:max(0, limit)]:
+        rel = r.get("absolute_url") or ""
+        out.append({"case_name": r.get("caseName"), "court": r.get("court"),
+                    "date": r.get("dateFiled"), "citations": r.get("citation") or [],
+                    "absolute_url": (BASE + rel) if rel else None})
+    return {"count": data.get("count"), "opinions": out,
+            "search_url": f"{BASE}/?q=cites:({opinion_id})&type=o&order_by=dateFiled+desc"}
 
 
 def opinion(opinion_id, *, timeout: int = 20, token: str | None = None, http=None) -> dict:
@@ -103,10 +131,12 @@ def fetch_file(url: str, dest, *, timeout: int = 30, token: str | None = None) -
 
 
 def enrich(entry: dict, *, token: str | None = None, http=None,
-           timeout: int = 20) -> dict:
+           timeout: int = 20, citing_limit: int = 0) -> dict:
     """Attach a CourtListener result to a packet *case* entry: sets
     ``entry['courtlistener']`` and appends opinion / download links to
-    ``entry['sources']['links']``. No-op (returns entry) for non-cases."""
+    ``entry['sources']['links']``. With ``citing_limit > 0``, also attaches the
+    most-recent citing opinions (``res['citing']``) for treatment review. No-op
+    (returns entry) for non-cases."""
     if entry.get("kind") != "case":
         return entry
     res = lookup(entry["cite"], token=token, http=http, timeout=timeout)
@@ -120,4 +150,7 @@ def enrich(entry: dict, *, token: str | None = None, http=None,
             links.append({"provider": "courtlistener_pdf",
                           "label": "CourtListener — opinion file", "access": "free",
                           "url": res["download_url"]})
+        if citing_limit and res.get("opinion_id"):
+            res["citing"] = citing(res["opinion_id"], limit=citing_limit,
+                                   token=token, http=http, timeout=timeout)
     return entry

@@ -121,7 +121,7 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
                  scope: str | None = None, fetch_text: bool = True,
                  treatments: dict | None = None, title: str | None = None,
                  courtlistener_lookup: bool = False, cl_token: str | None = None,
-                 cl_http=None, cl_timeout: int = 20) -> dict:
+                 cl_http=None, cl_timeout: int = 20, cl_citing_limit: int = 0) -> dict:
     """Build a verification packet from an explicit ``cites`` list and/or the
     citations found in ``draft``. ``fetch_text=False`` keeps it fully offline
     (uses the adapter's offline authority text). ``treatments`` maps a cite to an
@@ -129,7 +129,8 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
 
     ``courtlistener_lookup=True`` opts into a network call per case citation to
     attach the CourtListener opinion link/excerpt (``cl_token`` raises rate
-    limits; ``cl_http`` injects the HTTP layer for tests)."""
+    limits; ``cl_http`` injects the HTTP layer for tests). ``cl_citing_limit > 0``
+    also attaches the most-recent citing opinions per case for treatment review."""
     vocab = {}
     try:
         vocab = adapter.build_vocabulary(scope)
@@ -166,7 +167,8 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
 
     if courtlistener_lookup:
         for e in entries:
-            courtlistener.enrich(e, token=cl_token, http=cl_http, timeout=cl_timeout)
+            courtlistener.enrich(e, token=cl_token, http=cl_http, timeout=cl_timeout,
+                                 citing_limit=cl_citing_limit)
 
     counts = {
         "total": len(entries),

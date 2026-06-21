@@ -74,12 +74,17 @@ def main(argv=None) -> int:
                     help="offline: use the adapter's bundled text, don't fetch source URLs")
     pk.add_argument("--courtlistener", action="store_true",
                     help="network: attach the CourtListener opinion link/excerpt per case")
+    pk.add_argument("--citing", type=int, default=0, metavar="N",
+                    help="network: also attach the N most-recent citing opinions per case "
+                         "for treatment review (implies --courtlistener)")
     pk.add_argument("--fetch-opinions", metavar="DIR",
                     help="network: download available opinion files into DIR and link them "
                          "(implies --courtlistener)")
 
     cl = sub.add_parser("cl-lookup")
     cl.add_argument("--cite", required=True)
+    cl.add_argument("--citing", type=int, default=0, metavar="N",
+                    help="also list the N most-recent citing opinions (treatment review)")
     cl.add_argument("--json", action="store_true")
 
     v = sub.add_parser("verify"); v.add_argument("receipt"); v.add_argument("--input")
@@ -100,13 +105,20 @@ def main(argv=None) -> int:
         return 0 if ok else 1
     if a.cmd == "cl-lookup":
         import os
-        res = courtlistener.lookup(a.cite, token=os.environ.get("COURTLISTENER_TOKEN"))
+        token = os.environ.get("COURTLISTENER_TOKEN")
+        res = courtlistener.lookup(a.cite, token=token)
+        if res.get("found") and a.citing:
+            res["citing"] = courtlistener.citing(res["opinion_id"], limit=a.citing, token=token)
         if a.json:
             print(json.dumps(res, indent=2, ensure_ascii=False))
         elif res.get("found"):
             print(f"{res['case_name']} — {res['court']}, {res['date']}")
             print(f"  citations: {', '.join(res['citations'])}")
             print(f"  opinion:   {res['absolute_url']}")
+            if res.get("cite_count") is not None:
+                print(f"  cited by ~{res['cite_count']} later opinion(s) — review for treatment")
+            for o in (res.get("citing") or {}).get("opinions", []):
+                print(f"    - {o.get('date') or ''}  {o.get('case_name')}  {o.get('absolute_url')}")
         else:
             print(f"not found: {a.cite}" + (f" ({res['error']})" if res.get("error") else ""))
         return 0 if res.get("found") else 1
@@ -145,11 +157,12 @@ def main(argv=None) -> int:
                       if a.treatments else None)
         draft = _read(a.draft) if a.draft else None
         token = os.environ.get("COURTLISTENER_TOKEN")
-        use_cl = a.courtlistener or bool(a.fetch_opinions)
+        use_cl = a.courtlistener or bool(a.fetch_opinions) or a.citing > 0
         packet = research.build_packet(adapter, cites=a.cite or None, draft=draft,
                                        scope=a.scope, fetch_text=not a.no_fetch,
                                        treatments=treatments, title=a.title,
-                                       courtlistener_lookup=use_cl, cl_token=token)
+                                       courtlistener_lookup=use_cl, cl_token=token,
+                                       cl_citing_limit=a.citing)
         if a.fetch_opinions:
             n = research.attach_opinions(packet, a.fetch_opinions, token=token)
             print(f"downloaded {n} opinion file(s) -> {a.fetch_opinions}", file=sys.stderr)
