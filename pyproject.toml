@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-hallucination-checker"
+version = "0.1.0"
+description = "Force closed-vocabulary citations, substitute the real source text, and inspect whether each conclusion is actually supported — with dead-link detection, tamper-evident attestation, and harness guards."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "bedardandy" }]
+keywords = ["llm", "hallucination", "citations", "rag", "guardrails", "attestation"]
+dependencies = []                      # core is stdlib-only
+
+[project.optional-dependencies]
+llm = ["openai>=1.40"]                  # only needed for the inspector LLM call
+dev = ["pytest>=7"]
+
+[project.scripts]
+hallucheck = "hallucheck.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bedardandy/LLM_Hallucination_Checker"
+
+[tool.setuptools]
+packages = ["hallucheck", "hallucheck.hooks", "adapters", "adapters.maine"]
+
+[tool.setuptools.package-data]
+"adapters.maine" = ["data/*.json", "data/forms/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
