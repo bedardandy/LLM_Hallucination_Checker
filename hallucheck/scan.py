@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 from . import inspector
+from .textnorm import clean
 
 _RE_URL = re.compile(r"https?://[^\s)>\]\"'}]+")
 _PLACEHOLDER_HOSTS = ("example.com", "example.org", "example.net", "example.edu",
@@ -43,25 +44,30 @@ def scan_urls(text: str, adapter, *, check_live: bool = False) -> list[dict]:
 
 def report(text: str, adapter, *, scope: str | None = None,
            check_live: bool = False) -> dict:
-    """Scan ``text`` and bucket: ``leaked`` (citation-shaped, outside any
-    ``[[REF:]]``), ``unresolvable`` (not in the index), ``out_of_vocab`` (resolves
-    but not in ``scope``'s vocabulary), and ``fabricated_urls``."""
-    text = text or ""
+    """Scan ``text`` and bucket findings. The text is first normalized
+    (:func:`hallucheck.textnorm.clean`) so homoglyph/zero-width evasion can't hide
+    a cite. Buckets: ``leaked`` (any citation-shaped span outside a ``[[REF:]]``
+    placeholder — i.e. unverified), ``unresolvable`` (not in the trusted index, even
+    if wrapped), ``out_of_vocab`` (resolves but not in ``scope``'s vocabulary), and
+    ``fabricated_urls``. ``leaked`` is *strict*: an unwrapped citation counts even
+    if the draft used no placeholders at all, which is what stops the "skip the
+    protocol and mischaracterize in prose" bypass."""
+    text = clean(text or "")
     hits = adapter.citation_spans(text, scope=scope)
     ph_spans = [(m.start(), m.end()) for m in inspector.PLACEHOLDER.finditer(text)]
     for h in hits:
         s, e = h["span"]
         h["in_placeholder"] = any(ps <= s and e <= pe for ps, pe in ph_spans)
-    uses_protocol = bool(ph_spans)
-    leaked = sorted({h["cite"] for h in hits if uses_protocol and not h["in_placeholder"]})
-    unresolvable = sorted({h["cite"] for h in hits if not h["resolves"]})
+    leaked = sorted({h["cite"] for h in hits if not h["in_placeholder"]})
     url_hits = scan_urls(text, adapter, check_live=check_live)
     out = {
-        "hits": hits, "uses_protocol": uses_protocol,
-        "leaked": leaked, "unresolvable": unresolvable,
+        "hits": hits, "uses_protocol": bool(ph_spans),
+        "leaked": leaked,
+        "unresolvable": sorted({h["cite"] for h in hits if not h["resolves"]}),
         "urls": url_hits,
         "fabricated_urls": sorted({h["url"] for h in url_hits
                                    if h["class"] in ("placeholder", "fabricated")}),
+        "unknown_urls": sorted({h["url"] for h in url_hits if h["class"] == "unknown"}),
         "dead_urls": sorted({h["url"] for h in url_hits if h.get("link_status") == "dead"}),
     }
     if scope is not None:

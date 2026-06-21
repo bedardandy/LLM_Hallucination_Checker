@@ -19,6 +19,8 @@ def _reason(scan_rep: dict, result: dict) -> str:
         bits.append(f"citations outside the [[REF:]] protocol: {', '.join(scan_rep['leaked'])}")
     if scan_rep.get("unresolvable"):
         bits.append(f"citations not in the trusted index: {', '.join(scan_rep['unresolvable'])}")
+    if scan_rep.get("out_of_vocab"):
+        bits.append(f"citations outside the allowed scope: {', '.join(scan_rep['out_of_vocab'])}")
     if scan_rep.get("fabricated_urls"):
         bits.append(f"fabricated/placeholder URLs: {', '.join(scan_rep['fabricated_urls'])}")
     if result.get("invented"):
@@ -33,8 +35,15 @@ def _reason(scan_rep: dict, result: dict) -> str:
 
 
 def evaluate(text: str, adapter, *, scope: str | None = None, llm: bool = False,
-             attest: bool = True, log_path=None, model: str | None = None) -> dict:
-    """Return ``{block, reason, scan, attestation?}`` for a piece of model output."""
+             attest: bool = True, log_path=None, model: str | None = None,
+             require_protocol: bool = True) -> dict:
+    """Return ``{block, reason, scan, attestation?}`` for a piece of model output.
+
+    Blocks on an unresolvable cite, an out-of-scope cite, or a fabricated URL —
+    always. With ``require_protocol`` (default) it also blocks on any *leaked*
+    citation (one written outside a ``[[REF:]]`` placeholder), since an unwrapped
+    cite is never substituted or inspected and so can't be verified; set
+    ``require_protocol=False`` to allow bare prose citations."""
     scan_rep = scan.report(text or "", adapter, scope=scope)
     result = {"ok": True, "scope": scope, "scan": scan_rep, "verdicts": [],
               "summary": {"fail": 0, "unresolved": 0, "dead_links": 0, "invented": 0}}
@@ -46,8 +55,10 @@ def evaluate(text: str, adapter, *, scope: str | None = None, llm: bool = False,
         result = ins
         result["scope"] = scope
 
-    block = bool(scan_rep.get("leaked") or scan_rep.get("unresolvable")
+    block = bool(scan_rep.get("unresolvable") or scan_rep.get("out_of_vocab")
                  or scan_rep.get("fabricated_urls"))
+    if require_protocol:
+        block = block or bool(scan_rep.get("leaked"))
     if llm:
         s = result.get("summary") or {}
         block = block or s.get("fail", 0) > 0 or bool(result.get("invented")) \

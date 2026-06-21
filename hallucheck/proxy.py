@@ -37,9 +37,11 @@ def _message_text(body: dict) -> str:
     return content or ""
 
 
-def apply_guard(resp_body: dict, adapter, *, scope=None, fail_closed=FAIL_CLOSED,
+def apply_guard(resp_body: dict, adapter, *, scope=None, fail_closed=None,
                 log_path=None, llm=False) -> dict:
-    """Inspect a chat-completion response body in place and annotate it."""
+    """Inspect a chat-completion response body in place and annotate it.
+    ``fail_closed`` defaults to ``$PROXY_FAIL_CLOSED`` read at call time."""
+    fail_closed = FAIL_CLOSED if fail_closed is None else fail_closed
     text = _message_text(resp_body)
     if not text.strip():
         return resp_body

@@ -18,6 +18,8 @@ import pathlib
 import re
 from typing import Optional
 
+from hallucheck.textnorm import clean
+
 from . import fetch
 
 DATA = pathlib.Path(__file__).resolve().parent / "data"
@@ -31,11 +33,17 @@ DISCLAIMER = (
 # --- citation surface forms (Maine) ---------------------------------------- #
 _RE_18C = re.compile(r"\b18-C\b\s*(?:M\.?\s?R\.?\s?S\.?(?:A\.?)?)?[,\s]*"
                      r"(?:§|sec(?:tion|\.)?)\s*(\d+-\d+)(?:\([0-9A-Za-z]+\))?", re.IGNORECASE)
+# Spelled-out reverse order: "Section 9-999 of Title 18-C", "§3-401 of 18-C".
+_RE_18C_REV = re.compile(r"(?:§|sec(?:tion|\.)?)\s*(\d+-\d+)(?:\([0-9A-Za-z]+\))?"
+                         r"\s+of\s+(?:Title\s+)?18-C\b", re.IGNORECASE)
 _RE_MRS = re.compile(r"\b(\d+(?:-[A-Z])?)\s*M\.?\s?R\.?\s?S\.?(?:A\.?)?\s*"
                      r"(?:§\s*(\d+(?:-[A-Z])?)(?:\([0-9A-Za-z]+\))?)?")
 _RE_ME = re.compile(r"\b(\d{4})\s+ME\s+(\d+)\b")
 _RE_ATL = re.compile(r"\b(\d+)\s+A\.?\s?([23])d\s+(\d+)\b")
 _RE_BARE = re.compile(r"§\s*(\d+-\d+)(?:\([0-9A-Za-z]+\))?")
+# Enumerated list after §/§§: "§§ 3-401, 3-203 and 9-999" -> each section.
+_RE_SECLIST = re.compile(r"§§?\s*\d+-\d+(?:\s*(?:,|;|and|&)\s*\d+-\d+)+")
+_RE_SUBSEC = re.compile(r"\([0-9A-Za-z]+\)\s*$")
 _RE_18C_URL = re.compile(r"title18-Csec([0-9A-Za-z\-]+)\.html", re.IGNORECASE)
 _RE_MRS_URL = re.compile(r"/statutes/(\d+(?:-[A-Z])?)/title[^/]*sec([0-9A-Za-z\-]+)\.html",
                          re.IGNORECASE)
@@ -69,11 +77,19 @@ class MaineProbateAdapter:
     def _case_by_cite(self):
         return {c["cite"]: c for c in self._cases.values()}
 
+    def _section_of(self, cite: str) -> Optional[str]:
+        """Section key for an 18-C cite, tolerating a trailing subsection
+        (``18-C §3-401(a)`` -> ``3-401``)."""
+        if cite.startswith("18-C §"):
+            return _RE_SUBSEC.sub("", cite[len("18-C §"):]).strip()
+        return None
+
     def _resolves(self, cite: str) -> bool:
         if cite in self._xref:
             return True
-        if cite.startswith("18-C §"):
-            return cite[len("18-C §"):] in self._sections
+        sec = self._section_of(cite)
+        if sec is not None:
+            return sec in self._sections
         return cite in self._case_by_cite
 
     # --- vocabulary --------------------------------------------------------- #
@@ -124,8 +140,9 @@ class MaineProbateAdapter:
 
     # --- resolution --------------------------------------------------------- #
     def resolve(self, key: str, *, fetch_text: bool = True) -> Optional[dict]:
-        if key in self._xref or (key.startswith("18-C §") and key[len("18-C §"):] in self._sections):
-            meta = self._xref.get(key) or self._sections.get(key[len("18-C §"):], {})
+        sec = self._section_of(key)
+        if key in self._xref or (sec is not None and sec in self._sections):
+            meta = self._xref.get(key) or self._sections.get(sec, {})
             url, title = meta.get("url"), meta.get("title")
             if fetch_text and url:
                 res = fetch.fetch_statute_text(key, url)
@@ -151,7 +168,7 @@ class MaineProbateAdapter:
 
     # --- deterministic scanner --------------------------------------------- #
     def citation_spans(self, text: str, *, scope: str | None = None) -> list[dict]:
-        text = text or ""
+        text = clean(text or "")          # fold homoglyphs / strip zero-width (idempotent)
         vocab = set(self.build_vocabulary(scope)) if scope else None
         hits, taken = [], []
 
@@ -167,6 +184,8 @@ class MaineProbateAdapter:
 
         for m in _RE_18C.finditer(text):
             add(m.start(), m.end(), m.group(0), f"18-C §{m.group(1)}", "statute")
+        for m in _RE_18C_REV.finditer(text):
+            add(m.start(), m.end(), m.group(0), f"18-C §{m.group(1)}", "statute")
         for m in _RE_ME.finditer(text):
             add(m.start(), m.end(), m.group(0), f"{m.group(1)} ME {m.group(2)}", "case")
         for m in _RE_ATL.finditer(text):
@@ -176,6 +195,10 @@ class MaineProbateAdapter:
                 continue
             cite = f"{m.group(1)} M.R.S. §{m.group(2)}" if m.group(2) else f"{m.group(1)} M.R.S."
             add(m.start(), m.end(), m.group(0), cite, "crossref")
+        for m in _RE_SECLIST.finditer(text):        # "§§ 3-401, 9-999" -> each item
+            for sub in re.finditer(r"\d+-\d+", m.group(0)):
+                add(m.start() + sub.start(), m.start() + sub.end(),
+                    sub.group(0), f"18-C §{sub.group(0)}", "statute")
         for m in _RE_BARE.finditer(text):
             add(m.start(), m.end(), m.group(0), f"18-C §{m.group(1)}", "statute")
         for c in self._cases.values():

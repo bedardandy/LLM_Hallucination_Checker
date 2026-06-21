@@ -73,6 +73,14 @@ chained into an append-only log (each entry pins the prior line's hash).
 tampering or reordering. A receipt proves the guard *ran and what it found*; only
 the **fail-closed** hook/proxy proves the agent *heeded* a failure.
 
+## Threat model
+
+What it defends against (homoglyph/zero-width evasion, `§§` list smuggling,
+spelled-out and out-of-scope cites, no-protocol prose, dropped/fabricated inspector
+quotes) and the **intentional gaps** (non-enumerable URL hosts, streaming proxy,
+mischaracterization of a real wrapped cite) are documented in
+[`THREATS.md`](THREATS.md), each row tied to a regression test.
+
 ## Write your own adapter
 
 Implement `hallucheck.adapter.Adapter`: `build_vocabulary`, `resolve`,

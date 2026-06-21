@@ -179,6 +179,18 @@ def _validate_verdicts(raw: list, auth_by_cite: dict) -> list[dict]:
     return out
 
 
+def _add_unreviewed(verdicts: list[dict], resolved: list[dict]) -> None:
+    """A resolved citation the inspector silently skipped must not pass as clean:
+    record it as unreviewed/unclear so it still counts as needs-review."""
+    seen = {v.get("cite") for v in verdicts}
+    for c in resolved:
+        cite = c.get("cite", c["key"])
+        if cite not in seen and c["key"] not in seen:
+            verdicts.append({"cite": cite, "supports_conclusion": "unclear", "quote": "",
+                             "quote_grounded": False, "resolved": True, "unreviewed": True,
+                             "rationale": "inspector returned no verdict for this citation"})
+
+
 def _summary(result: dict) -> dict:
     counts = {"pass": 0, "fail": 0, "unclear": 0}
     for v in result.get("verdicts", []):
@@ -237,7 +249,9 @@ def inspect(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]], *
             msg = ch.content or getattr(ch, "reasoning_content", "") or ""
             raw = _extract_json(msg).get("verdicts")
             if isinstance(raw, list) and raw:
-                result["verdicts"] = _validate_verdicts(raw, auth_by_cite)
+                verdicts = _validate_verdicts(raw, auth_by_cite)
+                _add_unreviewed(verdicts, resolved)
+                result["verdicts"] = verdicts
                 result["summary"] = _summary(result)
                 return result
         except Exception as e:
