@@ -15,9 +15,11 @@ confirm the opinion is the right one and is still good law.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
+import socket
 import urllib.request
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from .links import USER_AGENT
 
@@ -26,6 +28,35 @@ STORAGE = "https://storage.courtlistener.com/"
 SEARCH = BASE + "/api/rest/v4/search/"
 OPINION = BASE + "/api/rest/v4/opinions/{id}/"
 
+# Resource caps (defensive: a hostile/oversized response shouldn't exhaust us).
+MAX_JSON_BYTES = 8 * 1024 * 1024
+MAX_FILE_BYTES = 40 * 1024 * 1024
+
+
+def _assert_fetchable(url: str) -> None:
+    """SSRF guard for downloads: allow only http(s) to a publicly-routable host.
+
+    Blocks ``file://`` / ``ftp://`` / ``data:`` and URLs that resolve to private,
+    loopback, link-local (incl. the cloud metadata 169.254.169.254), reserved or
+    multicast addresses. (Residual: DNS rebinding between this check and the
+    connect — acceptable for an opt-in research download.)"""
+    p = urlparse(url)
+    if p.scheme not in ("http", "https"):
+        raise ValueError(f"refusing non-http(s) URL: {url!r}")
+    host = p.hostname
+    if not host:
+        raise ValueError(f"no host in URL: {url!r}")
+    try:
+        infos = socket.getaddrinfo(host, p.port or (443 if p.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except OSError as e:
+        raise ValueError(f"cannot resolve host {host!r}: {e}") from e
+    for *_, sockaddr in infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            raise ValueError(f"refusing URL resolving to non-public address {ip} ({host})")
+
 
 def _http(url: str, *, timeout: int = 20, token: str | None = None) -> str:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
@@ -33,7 +64,10 @@ def _http(url: str, *, timeout: int = 20, token: str | None = None) -> str:
         headers["Authorization"] = f"Token {token}"
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+        raw = r.read(MAX_JSON_BYTES + 1)
+    if len(raw) > MAX_JSON_BYTES:
+        raise ValueError("CourtListener response exceeds size cap")
+    return raw.decode("utf-8", "replace")
 
 
 def lookup(cite: str, *, timeout: int = 20, token: str | None = None, http=None) -> dict:
@@ -115,18 +149,31 @@ def opinion(opinion_id, *, timeout: int = 20, token: str | None = None, http=Non
             "local_path": local, "file_url": file_url}
 
 
-def fetch_file(url: str, dest, *, timeout: int = 30, token: str | None = None) -> str:
-    """Download an opinion file to ``dest``. Returns the path. Raises on failure
-    (callers that must stay offline-safe should guard the call)."""
+def fetch_file(url: str, dest, *, timeout: int = 30, token: str | None = None,
+               max_bytes: int = MAX_FILE_BYTES) -> str:
+    """Download an opinion file to ``dest``. Returns the path. Validates the URL
+    (http(s), public host — see :func:`_assert_fetchable`) and caps the size;
+    raises on any failure (callers that must stay offline-safe should guard it)."""
+    import pathlib
+    _assert_fetchable(url)
     headers = {"User-Agent": USER_AGENT}
     if token:
         headers["Authorization"] = f"Token {token}"
     req = urllib.request.Request(url, headers=headers)
-    import pathlib
     p = pathlib.Path(dest)
     p.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
     with urllib.request.urlopen(req, timeout=timeout) as r, p.open("wb") as fh:
-        fh.write(r.read())
+        while True:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                fh.close()
+                p.unlink(missing_ok=True)
+                raise ValueError(f"opinion file exceeds size cap ({max_bytes} bytes)")
+            fh.write(chunk)
     return str(p)
 
 

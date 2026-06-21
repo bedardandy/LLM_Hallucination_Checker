@@ -216,8 +216,10 @@ def attach_opinions(packet: dict, dest_dir, *, token: str | None = None,
             file_url = det.get("file_url")
             if not file_url:
                 continue
-            ext = pathlib.Path(file_url.split("?")[0]).suffix or ".pdf"
-            out = dest / f"{e['anchor']}{ext}"
+            ext = pathlib.Path(file_url.split("?")[0]).suffix.lower()
+            if ext not in (".pdf", ".txt", ".html", ".htm", ".doc", ".rtf", ".wpd"):
+                ext = ".pdf"
+            out = dest / f"{e['anchor']}{ext}"      # anchor is already sanitized
             fetch(file_url, str(out), token=token)
             e["sources"]["links"].append(
                 {"provider": "local_opinion_file", "access": "free",

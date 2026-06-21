@@ -146,6 +146,48 @@ def test_citing_packet_renders_docx_and_pdf(tmp_path):
     assert p.read_bytes().startswith(b"%PDF")
 
 
+@pytest.mark.parametrize("bad", [
+    "file:///etc/passwd",                      # local file read
+    "ftp://ftp.example.com/x",                 # non-http scheme
+    "http://169.254.169.254/latest/meta-data/",  # cloud metadata (link-local)
+    "http://127.0.0.1/x",                      # loopback
+    "http://10.1.2.3/x",                       # private
+    "https://[::1]/x",                         # IPv6 loopback
+])
+def test_assert_fetchable_blocks_ssrf(bad):
+    with pytest.raises(ValueError):
+        courtlistener._assert_fetchable(bad)
+
+
+@pytest.mark.parametrize("ok", ["https://1.1.1.1/op.pdf", "http://8.8.8.8/op"])
+def test_assert_fetchable_allows_public(ok):
+    courtlistener._assert_fetchable(ok)         # no raise
+
+
+def test_fetch_file_refuses_bad_url_without_writing(tmp_path):
+    dest = tmp_path / "x.pdf"
+    with pytest.raises(ValueError):
+        courtlistener.fetch_file("file:///etc/passwd", str(dest))
+    assert not dest.exists()
+
+
+def test_fetch_file_enforces_size_cap(tmp_path, monkeypatch):
+    class FakeResp:
+        def __init__(self, data): self.data, self.pos = data, 0
+        def read(self, n=-1):
+            chunk = self.data[self.pos:self.pos + (n if n and n > 0 else len(self.data))]
+            self.pos += len(chunk)
+            return chunk
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: FakeResp(b"x" * 100))
+    dest = tmp_path / "big.pdf"
+    with pytest.raises(ValueError):
+        courtlistener.fetch_file("https://1.1.1.1/big.pdf", str(dest), max_bytes=10)
+    assert not dest.exists()                     # partial file cleaned up
+
+
 def test_attach_opinions_downloads_and_links(tmp_path):
     pkt = research.build_packet(MaineProbateAdapter(), cites=["457 A.2d 1123"],
                                 fetch_text=False, courtlistener_lookup=True,
