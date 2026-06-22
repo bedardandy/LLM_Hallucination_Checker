@@ -233,6 +233,10 @@ mypy hallucheck                  # type check
 pytest --cov=hallucheck          # tests + coverage (CI gates at 78%)
 ```
 
+Cross-check the bundled Maine case law against CourtListener (existence/metadata,
+**not** holdings) with `python tools/verify_caselaw.py` (or `hallucheck.caseaudit`
+in code).
+
 CI (`.github/workflows/ci.yml`) runs lint, type-check, and the test matrix on
 3.10/3.12. Pushing a `vX.Y.Z` tag triggers `release.yml`, which builds the sdist +
 wheel and creates a GitHub Release; PyPI publishing is opt-in (set the repo
