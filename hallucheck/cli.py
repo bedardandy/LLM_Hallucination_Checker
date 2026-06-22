@@ -18,7 +18,18 @@ import pathlib
 import sys
 
 from . import adapter as _adapter
-from . import attest, benchmark, courtlistener, embed, inspector, links, research, scan, sources
+from . import (
+    attest,
+    benchmark,
+    conformance,
+    courtlistener,
+    embed,
+    inspector,
+    links,
+    research,
+    scan,
+    sources,
+)
 
 
 def _read(path_or_dash: str | None) -> str:
@@ -88,6 +99,13 @@ def main(argv=None) -> int:
     bn.add_argument("--adapter", required=True)
     bn.add_argument("--json", action="store_true")
 
+    cf = sub.add_parser("conformance")
+    cf.add_argument("--adapter", required=True)
+    cf.add_argument("--scope")
+    cf.add_argument("--draft", help="sample text with a few citations the adapter recognizes")
+    cf.add_argument("--cite", action="append", default=[],
+                    help="a citation expected to resolve (repeatable)")
+
     cl = sub.add_parser("cl-lookup")
     cl.add_argument("--cite", required=True)
     cl.add_argument("--citing", type=int, default=0, metavar="N",
@@ -152,6 +170,17 @@ def main(argv=None) -> int:
                 if c["spurious"]:
                     print(f"      spurious: {c['spurious']}")
         return 1 if (rep["overall"]["fp"] or rep["overall"]["fn"]) else 0
+    if a.cmd == "conformance":
+        sample = _read(a.draft) if a.draft else ""
+        problems = conformance.check(adapter, sample_text=sample,
+                                     resolves_cites=a.cite or (), in_scope=a.scope)
+        if problems:
+            print(f"FAIL — {len(problems)} conformance problem(s):")
+            for p in problems:
+                print("  - " + p)
+        else:
+            print(f"OK — {adapter.name!r} conforms to the Adapter protocol")
+        return 1 if problems else 0
     if a.cmd == "links":
         rep = links.audit(adapter, a.scope_mode)
         if a.json:

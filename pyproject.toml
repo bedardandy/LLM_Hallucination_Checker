@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-hallucination-checker"
-version = "0.6.0"
+version = "0.7.0"
 description = "Force closed-vocabulary citations, substitute the real source text, and inspect whether each conclusion is actually supported — with dead-link detection, tamper-evident attestation, and harness guards."
 readme = "README.md"
 requires-python = ">=3.10"
