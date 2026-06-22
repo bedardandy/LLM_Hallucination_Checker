@@ -18,7 +18,8 @@ import pathlib
 import sys
 
 from . import adapter as _adapter
-from . import attest, courtlistener, embed, inspector, links, research, scan, sources
+from . import (attest, benchmark, courtlistener, embed, inspector, links,
+               research, scan, sources)
 
 
 def _read(path_or_dash: str | None) -> str:
@@ -27,10 +28,11 @@ def _read(path_or_dash: str | None) -> str:
     return pathlib.Path(path_or_dash).read_text(encoding="utf-8")
 
 
-def _inspect_result(adapter, scope, text):
+def _inspect_result(adapter, scope, text, samples=1):
     vocab = adapter.build_vocabulary(scope)
     resolver = lambda key: adapter.resolve(key, fetch_text=True)
-    res = inspector.inspect(text, set(vocab), resolver)
+    res = (inspector.inspect_consensus(text, set(vocab), resolver, samples=samples)
+           if samples > 1 else inspector.inspect(text, set(vocab), resolver))
     res["scope"] = scope
     res["scan"] = scan.report(text, adapter, scope=scope)
     res["disclaimer"] = getattr(adapter, "disclaimer", "")
@@ -50,6 +52,8 @@ def main(argv=None) -> int:
         if name == "inspect":
             sp.add_argument("--attest", action="store_true")
             sp.add_argument("--log")
+            sp.add_argument("--samples", type=int, default=1,
+                            help="run the inspector N times and take a fail-biased consensus")
         if name == "links":
             sp.add_argument("--check", action="store_true")
             sp.add_argument("--scope-mode", default="used", choices=["used", "all"])
@@ -80,6 +84,10 @@ def main(argv=None) -> int:
     pk.add_argument("--fetch-opinions", metavar="DIR",
                     help="network: download available opinion files into DIR and link them "
                          "(implies --courtlistener)")
+
+    bn = sub.add_parser("bench")
+    bn.add_argument("--adapter", required=True)
+    bn.add_argument("--json", action="store_true")
 
     cl = sub.add_parser("cl-lookup")
     cl.add_argument("--cite", required=True)
@@ -128,6 +136,23 @@ def main(argv=None) -> int:
     if a.cmd == "emit-prompt":
         print(inspector.draft_system_prompt(adapter.build_vocabulary(a.scope)))
         return 0
+    if a.cmd == "bench":
+        rep = benchmark.score(adapter)
+        if a.json:
+            print(json.dumps(rep, indent=2, ensure_ascii=False))
+        else:
+            o = rep["overall"]
+            print(f"deterministic detection [{rep['n_cases']} cases]: "
+                  f"precision={o['precision']} recall={o['recall']} f1={o['f1']} "
+                  f"(tp={o['tp']} fp={o['fp']} fn={o['fn']})")
+            for c in rep["cases"]:
+                flag = "" if not (c["missed"] or c["spurious"]) else "  <-- CHECK"
+                print(f"  {c['name']:34} P={c['precision']} R={c['recall']}{flag}")
+                if c["missed"]:
+                    print(f"      missed:   {c['missed']}")
+                if c["spurious"]:
+                    print(f"      spurious: {c['spurious']}")
+        return 1 if (rep["overall"]["fp"] or rep["overall"]["fn"]) else 0
     if a.cmd == "links":
         rep = links.audit(adapter, a.scope_mode)
         if a.json:
@@ -185,7 +210,7 @@ def main(argv=None) -> int:
               f"fabricated_urls={rep['fabricated_urls']}")
         return 1 if (rep["leaked"] or rep["unresolvable"] or rep["fabricated_urls"]) else 0
 
-    res = _inspect_result(adapter, a.scope, text)
+    res = _inspect_result(adapter, a.scope, text, samples=getattr(a, "samples", 1))
     if a.attest or a.log:
         res["attestation"] = attest.record_inspection(
             text, res, config_digest=_safe_digest(adapter), log_path=a.log)
