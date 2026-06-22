@@ -196,6 +196,19 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
     }
 
 
+def opinion_attachments(packet: dict) -> list[tuple[str, str]]:
+    """``[(title, pdf_path)]`` for the downloaded opinion *PDFs* in ``packet`` (from
+    a prior ``attach_opinions``), for embedding into the appendix PDF."""
+    out = []
+    for e in packet.get("entries", []):
+        for ln in e["sources"]["links"]:
+            url = ln.get("url") or ""
+            if ln.get("provider") == "local_opinion_file" and url.lower().endswith(".pdf"):
+                title = f"{e['cite']} — {e.get('title') or ''}".strip(" —")
+                out.append((title, url))
+    return out
+
+
 def attach_opinions(packet: dict, dest_dir, *, token: str | None = None,
                     http=None, fetch=None) -> int:
     """Download the available opinion file for each CourtListener-resolved case

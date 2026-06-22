@@ -58,6 +58,15 @@ rendered document — keep it there.
    scanner. Formats: `md`, `html`, `docx`, `pdf`, `json`. DOCX/PDF need the extra:
    `pip install 'llm-hallucination-checker[docs]'`.
 
+   To annotate the brief **in place** (each citation hyperlinked to its appendix
+   entry, in one clickable document), and to splice downloaded opinion PDFs into
+   the appendix as bookmarked pages:
+   ```bash
+   hallucheck memo --adapter maine --draft brief.txt --no-fetch --format html --out memo.html
+   hallucheck pack --adapter maine --draft brief.txt --fetch-opinions ./ops \
+       --embed-opinions --format pdf --out authorities.pdf
+   ```
+
    Opt-in network enrichment for cases (free CourtListener API; set
    `COURTLISTENER_TOKEN` to raise rate limits):
    ```bash
