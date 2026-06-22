@@ -130,6 +130,10 @@ hallucheck memo --adapter maine --draft brief.txt --no-fetch --format html --out
 # splice the downloaded opinion PDFs into the appendix as bookmarked pages
 hallucheck pack --adapter maine --draft brief.txt --fetch-opinions ./ops \
     --embed-opinions --format pdf --out authorities.pdf
+
+# with a free COURTLISTENER_TOKEN, use the real opinion text as the case excerpt
+COURTLISTENER_TOKEN=... hallucheck pack --adapter maine --draft brief.txt \
+    --opinion-text 4000 --format pdf --out authorities.pdf
 ```
 
 Each authority in the packet (MD/HTML/DOCX/PDF) carries: the **source text** with

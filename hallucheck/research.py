@@ -121,7 +121,8 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
                  scope: str | None = None, fetch_text: bool = True,
                  treatments: dict | None = None, title: str | None = None,
                  courtlistener_lookup: bool = False, cl_token: str | None = None,
-                 cl_http=None, cl_timeout: int = 20, cl_citing_limit: int = 0) -> dict:
+                 cl_http=None, cl_timeout: int = 20, cl_citing_limit: int = 0,
+                 cl_full_text: int = 0) -> dict:
     """Build a verification packet from an explicit ``cites`` list and/or the
     citations found in ``draft``. ``fetch_text=False`` keeps it fully offline
     (uses the adapter's offline authority text). ``treatments`` maps a cite to an
@@ -168,7 +169,7 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
     if courtlistener_lookup:
         for e in entries:
             courtlistener.enrich(e, token=cl_token, http=cl_http, timeout=cl_timeout,
-                                 citing_limit=cl_citing_limit)
+                                 citing_limit=cl_citing_limit, full_text=cl_full_text)
 
     counts = {
         "total": len(entries),

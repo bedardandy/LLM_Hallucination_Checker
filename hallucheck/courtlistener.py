@@ -178,12 +178,14 @@ def fetch_file(url: str, dest, *, timeout: int = 30, token: str | None = None,
 
 
 def enrich(entry: dict, *, token: str | None = None, http=None,
-           timeout: int = 20, citing_limit: int = 0) -> dict:
+           timeout: int = 20, citing_limit: int = 0, full_text: int = 0) -> dict:
     """Attach a CourtListener result to a packet *case* entry: sets
     ``entry['courtlistener']`` and appends opinion / download links to
     ``entry['sources']['links']``. With ``citing_limit > 0``, also attaches the
-    most-recent citing opinions (``res['citing']``) for treatment review. No-op
-    (returns entry) for non-cases."""
+    most-recent citing opinions (``res['citing']``) for treatment review. With
+    ``full_text > 0`` and a ``token``, replaces the short search snippet with up to
+    ``full_text`` chars of the opinion's actual text (the opinion-detail endpoint
+    requires authentication). No-op (returns entry) for non-cases."""
     if entry.get("kind") != "case":
         return entry
     res = lookup(entry["cite"], token=token, http=http, timeout=timeout)
@@ -197,6 +199,12 @@ def enrich(entry: dict, *, token: str | None = None, http=None,
             links.append({"provider": "courtlistener_pdf",
                           "label": "CourtListener — opinion file", "access": "free",
                           "url": res["download_url"]})
+        if full_text and token and res.get("opinion_id"):
+            pt = opinion(res["opinion_id"], token=token, http=http,
+                         timeout=timeout).get("plain_text")
+            if pt:
+                res["snippet"] = pt.strip()[:full_text]
+                res["snippet_source"] = "opinion-fulltext"
         if citing_limit and res.get("opinion_id"):
             res["citing"] = citing(res["opinion_id"], limit=citing_limit,
                                    token=token, http=http, timeout=timeout)

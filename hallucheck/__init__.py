@@ -25,4 +25,4 @@ from . import (  # noqa: F401
 )
 from .disclaimer import LIBRARY_DISCLAIMER, SHORT_DISCLAIMER  # noqa: F401
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
