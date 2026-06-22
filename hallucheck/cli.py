@@ -21,6 +21,7 @@ from . import adapter as _adapter
 from . import (
     attest,
     benchmark,
+    brief,
     conformance,
     courtlistener,
     embed,
@@ -94,6 +95,20 @@ def main(argv=None) -> int:
     pk.add_argument("--fetch-opinions", metavar="DIR",
                     help="network: download available opinion files into DIR and link them "
                          "(implies --courtlistener)")
+    pk.add_argument("--embed-opinions", action="store_true",
+                    help="splice downloaded opinion PDFs into the appendix PDF as "
+                         "bookmarked pages (needs --format pdf --fetch-opinions)")
+
+    mm = sub.add_parser("memo")
+    mm.add_argument("--adapter", required=True)
+    mm.add_argument("--scope")
+    mm.add_argument("--draft", required=True, help="the brief to annotate in place")
+    mm.add_argument("--cite", action="append", default=[])
+    mm.add_argument("--format", default="html", choices=["md", "html"])
+    mm.add_argument("--out")
+    mm.add_argument("--no-fetch", action="store_true")
+    mm.add_argument("--citing", type=int, default=0, metavar="N")
+    mm.add_argument("--treatments")
 
     bn = sub.add_parser("bench")
     bn.add_argument("--adapter", required=True)
@@ -226,8 +241,34 @@ def main(argv=None) -> int:
             rendered = embed.render(packet, a.format, path=a.out)
             if a.format in ("md", "html") and not a.out:
                 print(rendered)
+        if a.embed_opinions and a.format == "pdf" and a.out:
+            from . import pdfmerge
+            atts = research.opinion_attachments(packet)
+            if atts:
+                info = pdfmerge.append_pdfs(a.out, atts, a.out)
+                print(f"embedded {info['embedded']} opinion PDF(s) "
+                      f"({info['pages']} pages total)", file=sys.stderr)
         if a.out:
             print(f"wrote {packet['counts']['total']} authorities -> {a.out}", file=sys.stderr)
+        return 1 if packet["unverified"] else 0
+
+    if a.cmd == "memo":
+        import os
+        treatments = (json.loads(pathlib.Path(a.treatments).read_text(encoding="utf-8"))
+                      if a.treatments else None)
+        draft = _read(a.draft)
+        packet = research.build_packet(adapter, cites=a.cite or None, draft=draft,
+                                       scope=a.scope, fetch_text=not a.no_fetch,
+                                       treatments=treatments,
+                                       courtlistener_lookup=a.citing > 0,
+                                       cl_token=os.environ.get("COURTLISTENER_TOKEN"),
+                                       cl_citing_limit=a.citing)
+        memo_out = brief.render(adapter, draft, packet, a.format, scope=a.scope, path=a.out)
+        if not a.out:
+            print(memo_out)
+        else:
+            print(f"wrote memo ({packet['counts']['total']} authorities) -> {a.out}",
+                  file=sys.stderr)
         return 1 if packet["unverified"] else 0
 
     text = _read(a.draft)

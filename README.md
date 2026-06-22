@@ -123,6 +123,13 @@ hallucheck pack --adapter maine --draft brief.txt --treatments treatments.json \
     --citing 5 --format docx --out authorities.docx   # + opinion + cited-by links
 hallucheck pack --adapter maine --draft brief.txt \
     --fetch-opinions ./opinions --format pdf --out authorities.pdf  # download files
+
+# annotate the brief IN PLACE: each citation links to its authority in the appendix
+hallucheck memo --adapter maine --draft brief.txt --no-fetch --format html --out memo.html
+
+# splice the downloaded opinion PDFs into the appendix as bookmarked pages
+hallucheck pack --adapter maine --draft brief.txt --fetch-opinions ./ops \
+    --embed-opinions --format pdf --out authorities.pdf
 ```
 
 Each authority in the packet (MD/HTML/DOCX/PDF) carries: the **source text** with
@@ -137,6 +144,12 @@ clearly-labeled **subscription** (Westlaw, Lexis) and **bar-membership** portals
 (Maine/NH/MA bar → Fastcase·vLex; many Maine attorneys hold all three); the
 attorney's **treatment** findings (cross-linked to the next authority, so a
 negative-treatment note links onward); and **related authorities**.
+
+**`hallucheck memo`** produces a single clickable document — the brief with each
+citation hyperlinked to its appendix entry, followed by the appendix — so a
+reviewer jumps from a citation in the brief straight to its source text, treatment,
+and opinion links. With `--embed-opinions`, downloaded opinion PDFs are spliced
+into the appendix PDF as bookmarked pages (appendix + full opinions in one file).
 
 It does **not** decide whether a case is good law — negative treatment can't be
 derived from a closed corpus. The attorney records that in `treatments.json`

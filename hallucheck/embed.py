@@ -84,7 +84,7 @@ def _md_links(entry: dict) -> list[str]:
     return rows
 
 
-def to_markdown(packet: dict) -> str:
+def to_markdown(packet: dict, *, prologue: str = "") -> str:
     L: list[str] = [f"# {packet['title']}", ""]
     L.append("> **" + SHORT_DISCLAIMER + "**")
     for line in packet["disclaimer"].splitlines():
@@ -93,6 +93,8 @@ def to_markdown(packet: dict) -> str:
           f"*Adapter:* `{packet.get('adapter')}` · *scope:* `{packet.get('scope')}` · "
           f"*generated:* {packet['generated_at']} · *config:* `{packet.get('config_digest')}`",
           ""]
+    if prologue:
+        L += [prologue, ""]
     c = packet["counts"]
     L.append(f"**{c['total']} authorities** — resolved {c['resolved']}, "
              f"unresolved {c['unresolved']}, dead links {c['dead_links']}, "
@@ -207,7 +209,7 @@ def _html_links(entry: dict) -> str:
     return '<ul class="links">' + "".join(items) + "</ul>"
 
 
-def to_html(packet: dict) -> str:
+def to_html(packet: dict, *, prologue: str = "") -> str:
     p = packet
     out = ["<!doctype html><html lang=en><head><meta charset=utf-8>",
            "<meta name=viewport content='width=device-width,initial-scale=1'>",
@@ -217,6 +219,8 @@ def to_html(packet: dict) -> str:
            f'<p class="meta">Adapter <code>{_h(p.get("adapter"))}</code> · scope '
            f'<code>{_h(p.get("scope"))}</code> · generated {_h(p["generated_at"])} · '
            f'config <code>{_h(p.get("config_digest"))}</code></p>']
+    if prologue:
+        out.append(prologue)
     c = p["counts"]
     out.append(f"<p><b>{c['total']} authorities</b> — resolved {c['resolved']}, "
                f"unresolved {c['unresolved']}, dead links {c['dead_links']}, "
