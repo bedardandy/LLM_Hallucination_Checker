@@ -154,12 +154,32 @@ quotes) and the **intentional gaps** (non-enumerable URL hosts, streaming proxy,
 mischaracterization of a real wrapped cite) are documented in
 [`THREATS.md`](THREATS.md), each row tied to a regression test.
 
+## Bundled adapters
+
+| Adapter | Corpus | Vocabulary |
+|---|---|---|
+| `maine` | Maine Uniform Probate Code (Title 18-C) + Law Court cases, bundled | **closed** — a fixed, offline allow-list (the strongest guarantee) |
+| `courtlistener` | **any** jurisdiction's case law, via the free CourtListener API | **open** — a cite resolves if CourtListener returns a match |
+
+```bash
+# open-vocabulary: seed the allow-list with the cites you'll use, each confirmed live
+hallucheck pack --adapter courtlistener --scope "457 A.2d 1123; 2000 ME 17" \
+    --draft brief.txt --citing 5 --format pdf --out authorities.pdf
+```
+
+The `courtlistener` adapter trades the closed-vocabulary guarantee for coverage:
+the `[[REF:]]` protocol still confines the model to seeded keys, but the universe
+of valid cites is no longer a fixed list you control, and existence is confirmed
+over the network at resolve-time (not offline). A match is a lead to read, not a
+verified citation.
+
 ## Write your own adapter
 
 Implement `hallucheck.adapter.Adapter`: `build_vocabulary`, `resolve`,
 `citation_spans`, `url_in_index`, `index_urls`, `config_digest`, `disclaimer`.
 Register it (`hallucheck.adapter.register("mycorpus", "my.module:MyAdapter")`) or
-pass `--adapter my.module:MyAdapter`. See `adapters/maine/` for a full example.
+pass `--adapter my.module:MyAdapter`. See `adapters/maine/` (closed) and
+`adapters/courtlistener/` (open) for full examples.
 
 ## Incorporate by reference
 

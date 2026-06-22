@@ -169,7 +169,8 @@ class MaineProbateAdapter:
     def citation_spans(self, text: str, *, scope: str | None = None) -> list[dict]:
         text = clean(text or "")          # fold homoglyphs / strip zero-width (idempotent)
         vocab = set(self.build_vocabulary(scope)) if scope else None
-        hits, taken = [], []
+        hits: list = []
+        taken: list = []
 
         def add(s, e, raw, cite, kind):
             if any(not (e <= ts or s >= te) for ts, te in taken):
