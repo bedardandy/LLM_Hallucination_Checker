@@ -2,8 +2,14 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:           # lets you cut a release from the Actions tab (no terminal)
+    inputs:
+      version:
+        description: "Version tag to create & release, e.g. v0.9.0"
+        required: true
+        default: "v0.9.0"
 permissions:
-  contents: write          # create the GitHub Release
+  contents: write          # create the tag + GitHub Release
   id-token: write          # PyPI trusted publishing (only if opted in)
 jobs:
   build:
@@ -15,10 +21,13 @@ jobs:
           python-version: "3.12"
       - run: pip install build
       - run: python -m build           # sdist + wheel into dist/
+      # On a tag push, releases that tag; on manual dispatch, creates the tag
+      # (at the dispatched branch's HEAD) and releases it.
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
       # Opt-in: set repo variable PUBLISH_TO_PYPI=true and configure PyPI trusted
       # publishing for this repo. Off by default so the release never fails.
       - name: Publish to PyPI
