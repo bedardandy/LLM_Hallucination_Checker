@@ -13,6 +13,7 @@ from . import (  # noqa: F401
                attest,
                benchmark,
                brief,
+               caseaudit,
                conformance,
                courtlistener,
                embed,
