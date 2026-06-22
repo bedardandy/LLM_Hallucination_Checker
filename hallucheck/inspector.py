@@ -26,6 +26,7 @@ from typing import Callable, Optional
 
 PLACEHOLDER = re.compile(r"\[\[REF:\s*(?P<key>[^\]]+?)\s*\]\]")
 _VERDICTS = {"pass", "fail", "unclear"}
+MIN_QUOTE_CHARS = 8          # a "pass" must rest on a non-trivial grounded quote
 
 DRAFT_SYSTEM_HEADER = (
     "You are a drafting assistant. Draft the requested analysis, but you are "
@@ -145,13 +146,61 @@ def substitute(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]]
     return PLACEHOLDER.sub(_repl, draft or ""), citations
 
 
+def _provider() -> str:
+    """Which LLM backend to use: ``anthropic`` or ``openai`` (-compatible)."""
+    p = (os.environ.get("HALLUCHECK_PROVIDER") or "").lower()
+    if p in ("anthropic", "openai"):
+        return p
+    if os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
+        return "anthropic"
+    return "openai"
+
+
+def _default_model() -> str:
+    if _provider() == "anthropic":
+        return (os.environ.get("HALLUCHECK_MODEL") or os.environ.get("ANTHROPIC_MODEL")
+                or "claude-3-5-sonnet-latest")
+    return (os.environ.get("HALLUCHECK_MODEL") or os.environ.get("INSPECTOR_MODEL")
+            or os.environ.get("OPENAI_MODEL", "gpt-4o"))
+
+
 def _client():
+    """Construct the inspector client for the active provider. ``$HALLUCHECK_*``
+    overrides ``$ANTHROPIC_*`` / ``$OPENAI_*``."""
+    if _provider() == "anthropic":
+        from anthropic import Anthropic
+        kwargs = {}
+        key = os.environ.get("HALLUCHECK_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+        if key:
+            kwargs["api_key"] = key
+        base = os.environ.get("HALLUCHECK_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL")
+        if base:
+            kwargs["base_url"] = base
+        return Anthropic(**kwargs)
     from openai import OpenAI
     base = (os.environ.get("HALLUCHECK_BASE_URL") or os.environ.get("INSPECTOR_BASE_URL")
             or os.environ.get("OPENAI_BASE_URL", "http://127.0.0.1:8088/v1"))
     key = (os.environ.get("HALLUCHECK_API_KEY") or os.environ.get("INSPECTOR_API_KEY")
            or os.environ.get("OPENAI_API_KEY", "x"))
     return OpenAI(base_url=base, api_key=key)
+
+
+def _call_model(client, model: str, prompt: str) -> str:
+    """Provider-agnostic single completion -> raw message text. Routes by client
+    shape: Anthropic (``client.messages.create``) or OpenAI-compatible
+    (``client.chat.completions.create``)."""
+    if hasattr(client, "messages") and hasattr(client.messages, "create"):
+        r = client.messages.create(
+            model=model, max_tokens=1500, temperature=0, system=INSPECT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}])
+        parts = [getattr(b, "text", "") for b in (getattr(r, "content", None) or [])]
+        return "".join(p for p in parts if p)
+    r = client.chat.completions.create(
+        model=model, temperature=0, max_tokens=1500, timeout=120,
+        messages=[{"role": "system", "content": INSPECT_SYSTEM},
+                  {"role": "user", "content": prompt}])
+    ch = r.choices[0].message
+    return ch.content or getattr(ch, "reasoning_content", "") or ""
 
 
 def _norm(s: str) -> str:
@@ -173,6 +222,10 @@ def _validate_verdicts(raw: list, auth_by_cite: dict) -> list[dict]:
             grounded = False
             if verdict == "pass":
                 verdict = "unclear"          # fabricated supporting quote
+        # A "pass" must rest on a real, non-trivial quote: no quote (or a too-short
+        # one) is not enough to claim support -> downgrade to unclear.
+        if verdict == "pass" and len(_norm(quote)) < MIN_QUOTE_CHARS:
+            verdict = "unclear"
         out.append({"cite": cite, "supports_conclusion": verdict, "quote": quote,
                     "quote_grounded": grounded, "rationale": v.get("rationale"),
                     "resolved": auth is not None})
@@ -225,8 +278,7 @@ def inspect(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]], *
         auth_by_cite[c.get("cite", c["key"])] = c
         auth_by_cite[c["key"]] = c
 
-    model = (model or os.environ.get("HALLUCHECK_MODEL")
-             or os.environ.get("INSPECTOR_MODEL") or os.environ.get("OPENAI_MODEL", "gpt-4o"))
+    model = model or _default_model()
     if client is None:
         try:
             client = _client()
@@ -241,12 +293,7 @@ def inspect(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]], *
     last_exc = None
     for _ in range(retries):
         try:
-            r = client.chat.completions.create(
-                model=model, temperature=0, max_tokens=1500, timeout=120,
-                messages=[{"role": "system", "content": INSPECT_SYSTEM},
-                          {"role": "user", "content": prompt}])
-            ch = r.choices[0].message
-            msg = ch.content or getattr(ch, "reasoning_content", "") or ""
+            msg = _call_model(client, model, prompt)
             raw = _extract_json(msg).get("verdicts")
             if isinstance(raw, list) and raw:
                 verdicts = _validate_verdicts(raw, auth_by_cite)
@@ -261,3 +308,54 @@ def inspect(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]], *
         f" (last error: {last_exc})" if last_exc else "")
     result["summary"] = _summary(result)
     return result
+
+
+def aggregate_verdicts(runs: list[list[dict]]) -> list[dict]:
+    """Conservatively combine per-citation verdicts across inspector runs:
+    **any** ``fail`` -> fail; **unanimous** ``pass`` -> pass; otherwise ``unclear``.
+    Carries ``agreement`` (votes for the final verdict), ``samples``, and the raw
+    ``votes``. Picks a representative quote that matches the final verdict and is
+    grounded when possible."""
+    by_cite: dict[str, list] = {}
+    order: list[str] = []
+    for run in runs:
+        for v in run or []:
+            c = v.get("cite")
+            if c not in by_cite:
+                by_cite[c] = []
+                order.append(c)
+            by_cite[c].append(v)
+    out = []
+    for cite in order:
+        vs = by_cite[cite]
+        votes = [v.get("supports_conclusion") for v in vs]
+        if "fail" in votes:
+            final = "fail"
+        elif votes and all(x == "pass" for x in votes):
+            final = "pass"
+        else:
+            final = "unclear"
+        rep = next((v for v in vs if v.get("supports_conclusion") == final
+                    and v.get("quote_grounded")), None) \
+            or next((v for v in vs if v.get("supports_conclusion") == final), vs[0])
+        out.append({**rep, "supports_conclusion": final,
+                    "agreement": votes.count(final), "samples": len(vs), "votes": votes})
+    return out
+
+
+def inspect_consensus(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]],
+                      *, samples: int = 3, **kw) -> dict:
+    """Run :func:`inspect` ``samples`` times and combine the verdicts with
+    :func:`aggregate_verdicts` (fail-biased consensus). Reduces the impact of a
+    single flaky/colluding judgment. Returns the same shape as ``inspect`` plus a
+    ``consensus`` block; if no run completes, returns the first (failed) run."""
+    samples = max(1, samples)
+    runs = [inspect(draft, vocabulary, resolver, **kw) for _ in range(samples)]
+    ok_runs = [r for r in runs if r.get("ok")]
+    base = dict(ok_runs[0] if ok_runs else runs[0])
+    if not ok_runs:
+        return base
+    base["verdicts"] = aggregate_verdicts([r.get("verdicts", []) for r in ok_runs])
+    base["consensus"] = {"samples": samples, "ok_runs": len(ok_runs)}
+    base["summary"] = _summary(base)
+    return base

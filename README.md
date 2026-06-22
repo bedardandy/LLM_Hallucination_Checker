@@ -34,7 +34,7 @@ that the check ran.
 
 | Capability | Module | Network/LLM |
 |---|---|---|
-| **Inspect** placeholdered drafts (pass/fail/unclear + grounded quote) | `hallucheck.inspector` | LLM |
+| **Inspect** placeholdered drafts (pass/fail/unclear + grounded quote; Claude or OpenAI; `--samples` consensus) | `hallucheck.inspector` | LLM |
 | **Scan** for cites written outside the protocol, unresolvable cites, fabricated URLs | `hallucheck.scan` | offline |
 | **Dead-link** detection (DEAD ≠ BLOCKED: only 404/410/NXDOMAIN fail) | `hallucheck.links` | network |
 | **Attest** — signed, hash-chained receipts proving the check ran | `hallucheck.attest` | offline |
@@ -56,6 +56,24 @@ echo "The court must rule for us, see 18-C §9-999 and https://example.com/x" \
 export ATTEST_HMAC_KEY=operator-only-secret
 hallucheck inspect --adapter maine --scope DE-101 --draft draft.txt --attest --log run.jsonl
 hallucheck verify-log run.jsonl
+```
+
+## Inspector & benchmark
+
+The inspector LLM runs on **Claude or any OpenAI-compatible endpoint** — set
+`HALLUCHECK_PROVIDER=anthropic` (uses `ANTHROPIC_API_KEY`) or leave it for the
+OpenAI path; `HALLUCHECK_MODEL`/`HALLUCHECK_BASE_URL`/`HALLUCHECK_API_KEY`
+override either. Because a single judge is non-deterministic, `--samples N` runs it
+N times and takes a **fail-biased consensus** (any `fail` → fail; only a unanimous,
+grounded `pass` → pass). A `pass` must rest on a real, non-trivial quote that
+appears verbatim in the source, or it is downgraded to `unclear`.
+
+The **deterministic** layer (scanner + gates) is measurable, so regressions are
+caught in CI:
+
+```bash
+hallucheck bench --adapter maine        # precision/recall/F1 over labeled adversarial drafts
+hallucheck inspect --adapter maine --scope DE-101 --draft draft.txt --samples 3
 ```
 
 ## Inject into a harness

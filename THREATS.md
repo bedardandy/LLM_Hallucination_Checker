@@ -43,9 +43,12 @@ in `test_integration.py` (the proxy test runs a real HTTP round-trip).
 3. **Mischaracterization of a real, in-scope, properly-wrapped citation.** This is
    exactly what the **inspector LLM** judges; the deterministic layer cannot. The
    inspector is non-deterministic — we make faking harder (forced verbatim quote
-   that must appear in the source; dropped verdicts → unreviewed) but a weak or
-   colluding inspector can still mis-judge. **Defense-in-depth:** fail-closed gate
-   + attestation so the judgment is at least recorded and reproducible.
+   that must appear in the source **and** be non-trivial, or a `pass` is
+   downgraded; dropped verdicts → unreviewed; `--samples N` fail-biased consensus
+   to blunt a single flaky/colluding run) but a weak or colluding inspector can
+   still mis-judge. **Defense-in-depth:** fail-closed gate + attestation so the
+   judgment is at least recorded and reproducible. The deterministic layer's
+   detection is measured by `hallucheck bench` (see `hallucheck.benchmark`).
 4. **Exotic citation surface forms.** Non-adjacent references ("Title 18-C governs;
    under Section 9-999 …" with words in between) are intentionally *not* linked to
    avoid false positives on generic "Section N". The protocol — not the scanner —

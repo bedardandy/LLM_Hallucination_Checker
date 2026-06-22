@@ -70,3 +70,76 @@ def test_inspect_fails_soft_without_client(monkeypatch):
     monkeypatch.setattr(li, "_client", boom)
     res = li.inspect("[[REF: X1]]", {"X1"}, _resolver)
     assert res["ok"] is False and "unavailable" in res["error"]
+
+
+# --- provider abstraction (OpenAI-compatible + Anthropic) ------------------- #
+def make_anthropic_stub(payload):
+    def create(**_kw):
+        return types.SimpleNamespace(content=[types.SimpleNamespace(text=payload, type="text")])
+    return types.SimpleNamespace(messages=types.SimpleNamespace(create=create))
+
+
+def test_inspect_routes_anthropic_client_shape():
+    payload = json.dumps({"verdicts": [{"cite": "X1", "supports_conclusion": "fail",
+                                        "quote": "enters an order determining the result",
+                                        "rationale": "overstated"}]})
+    res = li.inspect("Under [[REF: X1]] we win.", {"X1"}, _resolver,
+                     client=make_anthropic_stub(payload), model="claude-x")
+    assert res["ok"] and res["verdicts"][0]["supports_conclusion"] == "fail"
+
+
+def test_provider_and_default_model(monkeypatch):
+    for k in ("HALLUCHECK_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+              "HALLUCHECK_MODEL", "ANTHROPIC_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    assert li._provider() == "openai"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    assert li._provider() == "anthropic"
+    assert li._default_model().startswith("claude")
+    monkeypatch.setenv("HALLUCHECK_PROVIDER", "openai")
+    assert li._provider() == "openai"
+
+
+# --- a "pass" needs a real, non-trivial grounded quote ---------------------- #
+def test_pass_without_quote_is_downgraded():
+    payload = json.dumps({"verdicts": [{"cite": "X1", "supports_conclusion": "pass",
+                                        "quote": "", "rationale": "trust me"}]})
+    res = li.inspect("[[REF: X1]]", {"X1"}, _resolver, client=make_stub(payload), model="m")
+    assert res["verdicts"][0]["supports_conclusion"] == "unclear"
+
+
+# --- multi-judge quorum ----------------------------------------------------- #
+def test_aggregate_verdicts_is_fail_biased():
+    runs = [[{"cite": "A", "supports_conclusion": "pass", "quote_grounded": True}],
+            [{"cite": "A", "supports_conclusion": "pass", "quote_grounded": True}],
+            [{"cite": "A", "supports_conclusion": "fail", "quote_grounded": True}]]
+    agg = li.aggregate_verdicts(runs)
+    assert agg[0]["supports_conclusion"] == "fail"      # any fail wins
+    assert agg[0]["samples"] == 3 and agg[0]["agreement"] == 1
+
+
+def test_aggregate_requires_unanimous_pass():
+    runs = [[{"cite": "A", "supports_conclusion": "pass", "quote_grounded": True}],
+            [{"cite": "A", "supports_conclusion": "unclear", "quote_grounded": False}]]
+    assert li.aggregate_verdicts(runs)[0]["supports_conclusion"] == "unclear"
+
+
+def make_cycle_stub(payloads):
+    seq = list(payloads)
+
+    def create(**_kw):
+        p = seq.pop(0) if len(seq) > 1 else seq[0]
+        msg = types.SimpleNamespace(content=p, reasoning_content="")
+        return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+    return types.SimpleNamespace(
+        chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=create)))
+
+
+def test_inspect_consensus_one_fail_flips_result():
+    q = "enters an order determining the result"
+    p = json.dumps({"verdicts": [{"cite": "X1", "supports_conclusion": "pass", "quote": q}]})
+    f = json.dumps({"verdicts": [{"cite": "X1", "supports_conclusion": "fail", "quote": q}]})
+    res = li.inspect_consensus("[[REF: X1]]", {"X1"}, _resolver, samples=3,
+                               client=make_cycle_stub([p, p, f]), model="m")
+    assert res["consensus"]["samples"] == 3
+    assert res["verdicts"][0]["supports_conclusion"] == "fail"
