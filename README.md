@@ -181,6 +181,23 @@ Register it (`hallucheck.adapter.register("mycorpus", "my.module:MyAdapter")`) o
 pass `--adapter my.module:MyAdapter`. See `adapters/maine/` (closed) and
 `adapters/courtlistener/` (open) for full examples.
 
+Prove it satisfies the contract with the **conformance kit** — one test, or one
+command:
+
+```python
+from hallucheck import conformance
+def test_conformance():
+    conformance.assert_conforms(MyAdapter(), sample_text="…1 A.2d 2…",
+                                resolves_cites=["1 A.2d 2"], in_scope="…")
+```
+```bash
+hallucheck conformance --adapter my.module:MyAdapter --draft sample.txt --cite "1 A.2d 2"
+```
+
+It checks shapes (vocabulary/`citation_spans`/`resolve`/`url_in_index`/
+`index_urls`/`config_digest`), span bounds, determinism, and graceful handling of
+unknown keys — reporting every violation instead of crashing.
+
 ## Incorporate by reference
 
 Pin it in another repo and supply only your adapter + data locally:
