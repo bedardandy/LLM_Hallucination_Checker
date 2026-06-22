@@ -19,7 +19,7 @@ from . import scan
 
 # Labeled adversarial drafts for the Maine adapter. Values are the cites/URLs the
 # offline scanner is expected to bucket; an empty list means "must find nothing".
-DATASET = [
+DATASET: list[dict] = [
     {"name": "clean_wrapped_in_scope",
      "draft": "The three-year limit applies, see [[REF: 18-C §3-108]].",
      "scope": "DE-101", "expect": {}},
@@ -79,13 +79,14 @@ def _prf(tp: int, fp: int, fn: int) -> dict:
 def score(adapter, dataset: list[dict] | None = None) -> dict:
     """Score the deterministic scanner against ``dataset`` (default :data:`DATASET`).
     Returns ``{overall:{precision,recall,f1,...}, cases:[...]}``; offline."""
-    dataset = dataset if dataset is not None else DATASET
-    cases, TP, FP, FN = [], 0, 0, 0
-    for case in dataset:
+    data = DATASET if dataset is None else dataset
+    cases: list = []
+    TP = FP = FN = 0
+    for case in data:
         rep = scan.report(case["draft"], adapter, scope=case.get("scope"))
         got, want = _findings(rep), _expected(case)
         tp, fp, fn = len(got & want), len(got - want), len(want - got)
         TP, FP, FN = TP + tp, FP + fp, FN + fn
         cases.append({"name": case["name"], **_prf(tp, fp, fn),
                       "missed": sorted(want - got), "spurious": sorted(got - want)})
-    return {"overall": _prf(TP, FP, FN), "n_cases": len(dataset), "cases": cases}
+    return {"overall": _prf(TP, FP, FN), "n_cases": len(data), "cases": cases}

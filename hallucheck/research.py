@@ -48,7 +48,7 @@ def extract_cites(adapter, draft: str, *, scope: str | None = None) -> list[dict
 
 
 def _treatment(cite: str, treatments: dict | None) -> dict:
-    base = {"status": "unreviewed", "note": "", "authorities": [], "reviewed_by": None}
+    base: dict = {"status": "unreviewed", "note": "", "authorities": [], "reviewed_by": None}
     if treatments and cite in treatments:
         t = treatments[cite] or {}
         base.update({k: t[k] for k in ("status", "note", "authorities", "reviewed_by")
@@ -104,7 +104,7 @@ def _relate(entries: list[dict]) -> None:
         hay = (a.get("text") or "")
         if not hay:
             continue
-        for cite_b, b in by_cite.items():
+        for cite_b in by_cite:
             if cite_b == a["cite"]:
                 continue
             if cite_b in hay:

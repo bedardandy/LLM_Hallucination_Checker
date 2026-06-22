@@ -90,7 +90,7 @@ def reporter_redirect(cite: str) -> str | None:
             f"{vol}/{page}/")
 
 
-def wayback(url: str) -> dict | None:
+def wayback(url: str | None) -> dict | None:
     """View + on-demand-save links for a source URL via the Internet Archive.
 
     The *save* link lets an attorney capture a timestamped snapshot — durable

@@ -45,8 +45,8 @@ def evaluate(text: str, adapter, *, scope: str | None = None, llm: bool = False,
     cite is never substituted or inspected and so can't be verified; set
     ``require_protocol=False`` to allow bare prose citations."""
     scan_rep = scan.report(text or "", adapter, scope=scope)
-    result = {"ok": True, "scope": scope, "scan": scan_rep, "verdicts": [],
-              "summary": {"fail": 0, "unresolved": 0, "dead_links": 0, "invented": 0}}
+    result: dict = {"ok": True, "scope": scope, "scan": scan_rep, "verdicts": [],
+                    "summary": {"fail": 0, "unresolved": 0, "dead_links": 0, "invented": 0}}
     if llm:
         vocab = adapter.build_vocabulary(scope)
         ins = inspector.inspect(text or "", set(vocab),

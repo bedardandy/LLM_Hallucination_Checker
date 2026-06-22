@@ -18,8 +18,7 @@ import pathlib
 import sys
 
 from . import adapter as _adapter
-from . import (attest, benchmark, courtlistener, embed, inspector, links,
-               research, scan, sources)
+from . import attest, benchmark, courtlistener, embed, inspector, links, research, scan, sources
 
 
 def _read(path_or_dash: str | None) -> str:

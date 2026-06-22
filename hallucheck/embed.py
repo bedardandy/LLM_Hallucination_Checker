@@ -210,7 +210,7 @@ def _html_links(entry: dict) -> str:
 def to_html(packet: dict) -> str:
     p = packet
     out = ["<!doctype html><html lang=en><head><meta charset=utf-8>",
-           f"<meta name=viewport content='width=device-width,initial-scale=1'>",
+           "<meta name=viewport content='width=device-width,initial-scale=1'>",
            f"<title>{_h(p['title'])}</title><style>{_CSS}</style></head><body>",
            f"<h1>{_h(p['title'])}</h1>",
            f'<div class="disclaimer"><b>{_h(SHORT_DISCLAIMER)}</b>\n\n{_h(p["disclaimer"])}</div>',
@@ -291,13 +291,13 @@ def _html_treat_auth(a: dict) -> str:
 def to_docx(packet: dict, path: str):
     try:
         from docx import Document
+        from docx.opc.constants import RELATIONSHIP_TYPE as RT
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
-        from docx.opc.constants import RELATIONSHIP_TYPE as RT
-        from docx.shared import RGBColor, Pt
-    except Exception as e:                                  # pragma: no cover
+        from docx.shared import Pt, RGBColor
+    except Exception as exc:                                # pragma: no cover
         raise RuntimeError("DOCX output needs the [docs] extra: pip install "
-                           "'llm-hallucination-checker[docs]'") from e
+                           "'llm-hallucination-checker[docs]'") from exc
 
     state = {"bm": 0}
 
@@ -338,7 +338,7 @@ def to_docx(packet: dict, path: str):
                  ).font.size = Pt(8)
 
     doc.add_heading("Table of authorities", level=1)
-    for i, e in enumerate(packet["entries"], 1):
+    for e in packet["entries"]:                  # "List Number" style auto-numbers
         par = doc.add_paragraph(style="List Number")
         internal_link(par, e["anchor"], e["cite"])
         par.add_run(f" — {e['title'] or ''} ({e['kind']}) — {_status(e)}")
@@ -425,15 +425,21 @@ def _docx_treat_auth(par, a, internal_link, external_link):
 # --------------------------------------------------------------------------- #
 def to_pdf(packet: dict, path: str):
     try:
-        from reportlab.lib.pagesizes import LETTER
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
         from reportlab.lib.colors import HexColor
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
         from reportlab.platypus import (
-            BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Flowable)
-    except Exception as e:                                  # pragma: no cover
+            BaseDocTemplate,
+            Flowable,
+            Frame,
+            PageTemplate,
+            Paragraph,
+            Spacer,
+        )
+    except Exception as exc:                                # pragma: no cover
         raise RuntimeError("PDF output needs the [docs] extra: pip install "
-                           "'llm-hallucination-checker[docs]'") from e
+                           "'llm-hallucination-checker[docs]'") from exc
 
     import xml.sax.saxutils as su
 

@@ -4,6 +4,10 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 .venv/
 inspection_log.jsonl
 *.tmp

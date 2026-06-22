@@ -1,8 +1,8 @@
 """Attestation tests — signing, tamper detection, hash-chained log, binding."""
 import json
 
-from hallucheck import attest, guard
 from adapters.maine.adapter import MaineProbateAdapter
+from hallucheck import attest, guard
 
 _RESULT = {
     "ok": True, "scope": "DE-101",

@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Callable, Optional
+from collections.abc import Callable
 
 PLACEHOLDER = re.compile(r"\[\[REF:\s*(?P<key>[^\]]+?)\s*\]\]")
 _VERDICTS = {"pass", "fail", "unclear"}
@@ -88,7 +88,7 @@ def draft_system_prompt(vocabulary: dict) -> str:
     return DRAFT_SYSTEM_HEADER + "\n\nALLOWED CITATIONS:\n" + "\n".join(lines)
 
 
-def substitute(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]]):
+def substitute(draft: str, vocabulary, resolver: Callable[[str], dict | None]):
     """Replace each ``[[REF: KEY]]`` with the cited authority text (``re.sub`` over
     captured spans). Returns ``(text, citations)`` with a per-cite ``status`` of
     resolved / unresolved / dead_link / invented."""
@@ -253,7 +253,7 @@ def _summary(result: dict) -> dict:
     return counts
 
 
-def inspect(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]], *,
+def inspect(draft: str, vocabulary, resolver: Callable[[str], dict | None], *,
             model: str | None = None, client=None, retries: int = 4) -> dict:
     """Substitute citations, then score each with the inspector LLM. Returns
     ``{ok, substituted, citations, verdicts, invented, unresolved, dead_links,
@@ -316,8 +316,8 @@ def aggregate_verdicts(runs: list[list[dict]]) -> list[dict]:
     Carries ``agreement`` (votes for the final verdict), ``samples``, and the raw
     ``votes``. Picks a representative quote that matches the final verdict and is
     grounded when possible."""
-    by_cite: dict[str, list] = {}
-    order: list[str] = []
+    by_cite: dict = {}
+    order: list = []
     for run in runs:
         for v in run or []:
             c = v.get("cite")
@@ -343,7 +343,7 @@ def aggregate_verdicts(runs: list[list[dict]]) -> list[dict]:
     return out
 
 
-def inspect_consensus(draft: str, vocabulary, resolver: Callable[[str], Optional[dict]],
+def inspect_consensus(draft: str, vocabulary, resolver: Callable[[str], dict | None],
                       *, samples: int = 3, **kw) -> dict:
     """Run :func:`inspect` ``samples`` times and combine the verdicts with
     :func:`aggregate_verdicts` (fail-biased consensus). Reduces the impact of a
