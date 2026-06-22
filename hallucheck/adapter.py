@@ -16,7 +16,7 @@ a complete reference.
 from __future__ import annotations
 
 import importlib
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 _REGISTRY: dict[str, str] = {
     # name -> "dotted.module:factory"
@@ -32,7 +32,7 @@ class Adapter(Protocol):
     def build_vocabulary(self, scope: str | None = None) -> dict:
         """KEY -> metadata ({kind, cite, title/name, url, note, ...}) for ``scope``."""
 
-    def resolve(self, key: str, *, fetch_text: bool = True) -> Optional[dict]:
+    def resolve(self, key: str, *, fetch_text: bool = True) -> dict | None:
         """Resolve KEY to an authority ``{cite, title, url, text, text_verified}``;
         ``{dead_link: True, text: None}`` when the source URL is dead; ``None`` when
         unresolvable."""
@@ -42,7 +42,7 @@ class Adapter(Protocol):
         resolve each against the closed index. Each hit:
         ``{raw, cite, kind, span:[s,e], resolves: bool, in_vocab?: bool}``."""
 
-    def url_in_index(self, url: str) -> Optional[bool]:
+    def url_in_index(self, url: str) -> bool | None:
         """Offline: ``True``/``False`` whether a source URL is in the trusted index,
         or ``None`` when the URL isn't one this adapter can judge."""
 

@@ -16,7 +16,6 @@ import hashlib
 import json
 import pathlib
 import re
-from typing import Optional
 
 from hallucheck.textnorm import clean
 
@@ -77,7 +76,7 @@ class MaineProbateAdapter:
     def _case_by_cite(self):
         return {c["cite"]: c for c in self._cases.values()}
 
-    def _section_of(self, cite: str) -> Optional[str]:
+    def _section_of(self, cite: str) -> str | None:
         """Section key for an 18-C cite, tolerating a trailing subsection
         (``18-C §3-401(a)`` -> ``3-401``)."""
         if cite.startswith("18-C §"):
@@ -134,12 +133,12 @@ class MaineProbateAdapter:
                 add_case(cite)
         return vocab
 
-    def _form(self, scope: str) -> Optional[dict]:
+    def _form(self, scope: str) -> dict | None:
         p = DATA / "forms" / f"{scope}.json"
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
     # --- resolution --------------------------------------------------------- #
-    def resolve(self, key: str, *, fetch_text: bool = True) -> Optional[dict]:
+    def resolve(self, key: str, *, fetch_text: bool = True) -> dict | None:
         sec = self._section_of(key)
         if key in self._xref or (sec is not None and sec in self._sections):
             meta = self._xref.get(key) or self._sections.get(sec, {})
@@ -220,7 +219,7 @@ class MaineProbateAdapter:
                     urls.add(m["url"])
         return urls
 
-    def url_in_index(self, url: str) -> Optional[bool]:
+    def url_in_index(self, url: str) -> bool | None:
         if not url or "legislature.maine.gov" not in url:
             return None
         if url in self._all_urls:

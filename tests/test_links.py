@@ -36,7 +36,7 @@ def _fake(spec):
         if spec == "dns":
             raise urllib.error.URLError(socket.gaierror("no such host"))
         if spec == "timeout":
-            raise urllib.error.URLError(socket.timeout("timed out"))
+            raise urllib.error.URLError(TimeoutError("timed out"))
         raise AssertionError(spec)
     return fake
 

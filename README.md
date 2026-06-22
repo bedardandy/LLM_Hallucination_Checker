@@ -169,6 +169,20 @@ Pin it in another repo and supply only your adapter + data locally:
 llm-hallucination-checker @ git+https://github.com/bedardandy/LLM_Hallucination_Checker@v0.1.0
 ```
 
+## Development
+
+```bash
+pip install -e ".[dev,docs]"     # tests + ruff + mypy + DOCX/PDF renderers
+ruff check .                     # lint (style is deliberately terse; see pyproject)
+mypy hallucheck                  # type check
+pytest --cov=hallucheck          # tests + coverage (CI gates at 78%)
+```
+
+CI (`.github/workflows/ci.yml`) runs lint, type-check, and the test matrix on
+3.10/3.12. Pushing a `vX.Y.Z` tag triggers `release.yml`, which builds the sdist +
+wheel and creates a GitHub Release; PyPI publishing is opt-in (set the repo
+variable `PUBLISH_TO_PYPI=true` with trusted publishing configured).
+
 ## License
 
 MIT.
