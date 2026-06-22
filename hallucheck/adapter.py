@@ -21,6 +21,7 @@ from typing import Protocol, runtime_checkable
 _REGISTRY: dict[str, str] = {
     # name -> "dotted.module:factory"
     "maine": "adapters.maine.adapter:MaineProbateAdapter",
+    "courtlistener": "adapters.courtlistener.adapter:CourtListenerCaselawAdapter",
 }
 
 

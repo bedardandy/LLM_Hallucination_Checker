@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-hallucination-checker"
-version = "0.5.0"
+version = "0.6.0"
 description = "Force closed-vocabulary citations, substitute the real source text, and inspect whether each conclusion is actually supported — with dead-link detection, tamper-evident attestation, and harness guards."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,7 +25,8 @@ hallucheck = "hallucheck.cli:main"
 Homepage = "https://github.com/bedardandy/LLM_Hallucination_Checker"
 
 [tool.setuptools]
-packages = ["hallucheck", "hallucheck.hooks", "adapters", "adapters.maine"]
+packages = ["hallucheck", "hallucheck.hooks", "adapters", "adapters.maine",
+            "adapters.courtlistener"]
 
 [tool.setuptools.package-data]
 "adapters.maine" = ["data/*.json", "data/forms/*.json"]
