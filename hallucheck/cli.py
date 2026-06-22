@@ -98,6 +98,9 @@ def main(argv=None) -> int:
     pk.add_argument("--embed-opinions", action="store_true",
                     help="splice downloaded opinion PDFs into the appendix PDF as "
                          "bookmarked pages (needs --format pdf --fetch-opinions)")
+    pk.add_argument("--opinion-text", type=int, nargs="?", const=4000, default=0,
+                    metavar="N", help="use up to N chars of the real opinion text as the "
+                    "case excerpt (needs COURTLISTENER_TOKEN; implies --courtlistener)")
 
     mm = sub.add_parser("memo")
     mm.add_argument("--adapter", required=True)
@@ -225,12 +228,12 @@ def main(argv=None) -> int:
                       if a.treatments else None)
         draft = _read(a.draft) if a.draft else None
         token = os.environ.get("COURTLISTENER_TOKEN")
-        use_cl = a.courtlistener or bool(a.fetch_opinions) or a.citing > 0
+        use_cl = a.courtlistener or bool(a.fetch_opinions) or a.citing > 0 or a.opinion_text > 0
         packet = research.build_packet(adapter, cites=a.cite or None, draft=draft,
                                        scope=a.scope, fetch_text=not a.no_fetch,
                                        treatments=treatments, title=a.title,
                                        courtlistener_lookup=use_cl, cl_token=token,
-                                       cl_citing_limit=a.citing)
+                                       cl_citing_limit=a.citing, cl_full_text=a.opinion_text)
         if a.fetch_opinions:
             n = research.attach_opinions(packet, a.fetch_opinions, token=token)
             print(f"downloaded {n} opinion file(s) -> {a.fetch_opinions}", file=sys.stderr)

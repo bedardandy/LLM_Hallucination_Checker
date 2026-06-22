@@ -75,6 +75,22 @@ def test_citing_never_raises():
     assert "OSError" in c["error"]
 
 
+def test_enrich_full_text_uses_opinion_plain_text():
+    case = {"cite": "457 A.2d 1123", "kind": "case",
+            "sources": {"links": [], "portals": []}}
+    courtlistener.enrich(case, http=fake_http, token="tok", full_text=20)
+    cl = case["courtlistener"]
+    assert cl["snippet"] == _OPINION["plain_text"].strip()[:20]
+    assert cl["snippet_source"] == "opinion-fulltext"
+
+
+def test_enrich_full_text_needs_token():
+    case = {"cite": "457 A.2d 1123", "kind": "case",
+            "sources": {"links": [], "portals": []}}
+    courtlistener.enrich(case, http=fake_http, full_text=20)   # no token -> search snippet
+    assert case["courtlistener"].get("snippet_source") is None
+
+
 def test_enrich_attaches_citing_when_requested():
     case = {"cite": "457 A.2d 1123", "kind": "case",
             "sources": {"links": [], "portals": []}}
