@@ -107,7 +107,7 @@ def main(argv=None) -> int:
     mm.add_argument("--scope")
     mm.add_argument("--draft", required=True, help="the brief to annotate in place")
     mm.add_argument("--cite", action="append", default=[])
-    mm.add_argument("--format", default="html", choices=["md", "html"])
+    mm.add_argument("--format", default="html", choices=["md", "html", "docx", "pdf"])
     mm.add_argument("--out")
     mm.add_argument("--no-fetch", action="store_true")
     mm.add_argument("--citing", type=int, default=0, metavar="N")
