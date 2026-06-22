@@ -59,10 +59,10 @@ rendered document — keep it there.
    `pip install 'llm-hallucination-checker[docs]'`.
 
    To annotate the brief **in place** (each citation hyperlinked to its appendix
-   entry, in one clickable document), and to splice downloaded opinion PDFs into
-   the appendix as bookmarked pages:
+   entry — real internal links/bookmarks in DOCX/PDF too), and to splice downloaded
+   opinion PDFs into the appendix as bookmarked pages:
    ```bash
-   hallucheck memo --adapter maine --draft brief.txt --no-fetch --format html --out memo.html
+   hallucheck memo --adapter maine --draft brief.txt --no-fetch --format docx --out memo.docx
    hallucheck pack --adapter maine --draft brief.txt --fetch-opinions ./ops \
        --embed-opinions --format pdf --out authorities.pdf
    ```

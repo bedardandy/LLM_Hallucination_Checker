@@ -149,10 +149,11 @@ clearly-labeled **subscription** (Westlaw, Lexis) and **bar-membership** portals
 attorney's **treatment** findings (cross-linked to the next authority, so a
 negative-treatment note links onward); and **related authorities**.
 
-**`hallucheck memo`** produces a single clickable document — the brief with each
-citation hyperlinked to its appendix entry, followed by the appendix — so a
-reviewer jumps from a citation in the brief straight to its source text, treatment,
-and opinion links. With `--embed-opinions`, downloaded opinion PDFs are spliced
+**`hallucheck memo`** produces a single document (Markdown, HTML, DOCX, or PDF) —
+the brief with each citation hyperlinked to its appendix entry (real internal
+links/bookmarks in DOCX/PDF), followed by the appendix — so a reviewer jumps from a
+citation in the brief straight to its source text, treatment, and opinion links.
+With `--embed-opinions`, downloaded opinion PDFs are spliced
 into the appendix PDF as bookmarked pages (appendix + full opinions in one file).
 
 It does **not** decide whether a case is good law — negative treatment can't be

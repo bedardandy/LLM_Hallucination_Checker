@@ -292,7 +292,7 @@ def _html_treat_auth(a: dict) -> str:
 # --------------------------------------------------------------------------- #
 # DOCX (optional: python-docx)
 # --------------------------------------------------------------------------- #
-def to_docx(packet: dict, path: str):
+def to_docx(packet: dict, path: str, *, prologue=None):
     try:
         from docx import Document
         from docx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -340,6 +340,9 @@ def to_docx(packet: dict, path: str):
     meta.add_run(f"Adapter: {packet.get('adapter')}  ·  scope: {packet.get('scope')}  ·  "
                  f"generated: {packet['generated_at']}  ·  config: {packet.get('config_digest')}"
                  ).font.size = Pt(8)
+
+    if prologue:                                  # e.g. the annotated brief, with internal links
+        prologue(doc, internal_link)
 
     doc.add_heading("Table of authorities", level=1)
     for e in packet["entries"]:                  # "List Number" style auto-numbers
@@ -427,7 +430,7 @@ def _docx_treat_auth(par, a, internal_link, external_link):
 # --------------------------------------------------------------------------- #
 # PDF (optional: reportlab) — outline bookmarks + internal & external links
 # --------------------------------------------------------------------------- #
-def to_pdf(packet: dict, path: str):
+def to_pdf(packet: dict, path: str, *, prologue_paras=()):
     try:
         from reportlab.lib.colors import HexColor
         from reportlab.lib.pagesizes import LETTER
@@ -479,7 +482,10 @@ def to_pdf(packet: dict, path: str):
              Paragraph(f"Adapter {esc(packet.get('adapter'))} · scope "
                        f"{esc(packet.get('scope'))} · generated {esc(packet['generated_at'])} "
                        f"· config {esc(packet.get('config_digest'))}", small),
-             Spacer(1, 8), Paragraph("Table of authorities", h1)]
+             Spacer(1, 8)]
+    for para in prologue_paras:                   # e.g. the annotated brief, inline links
+        story.append(Paragraph(para, body))
+    story.append(Paragraph("Table of authorities", h1))
     for i, e in enumerate(packet["entries"], 1):
         story.append(Paragraph(
             f'{i}. <a href="#{esc(e["anchor"])}" color="blue">{esc(e["cite"])}</a> — '

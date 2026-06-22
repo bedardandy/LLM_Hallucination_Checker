@@ -40,9 +40,37 @@ def test_annotate_spans_only_packet_cites():
     assert all(s["anchor"] == "auth-18-c-3-108" for s in spans)
 
 
-def test_render_unknown_format():
+def test_render_pdf_without_path_errors():
     with pytest.raises(ValueError):
         brief.render(MaineProbateAdapter(), DRAFT, _packet(), "pdf")
+
+
+def test_render_unknown_format():
+    with pytest.raises(ValueError):
+        brief.render(MaineProbateAdapter(), DRAFT, _packet(), "rtf", path="/tmp/x.rtf")
+
+
+def test_memo_docx_has_brief_bookmarks_and_links(tmp_path):
+    pytest.importorskip("docx")
+    out = tmp_path / "memo.docx"
+    brief.memo_docx(MaineProbateAdapter(), DRAFT, _packet(), str(out))
+    import zipfile
+    with zipfile.ZipFile(out) as z:
+        xml = z.read("word/document.xml").decode("utf-8")
+    assert "bookmarkStart" in xml                      # appendix anchors
+    assert "w:anchor" in xml                            # brief -> appendix internal links
+    from docx import Document
+    texts = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    assert "Brief" in texts and "18-C §3-108" in texts
+
+
+def test_memo_pdf_is_valid_with_internal_links(tmp_path):
+    pytest.importorskip("reportlab")
+    out = tmp_path / "memo.pdf"
+    brief.memo_pdf(MaineProbateAdapter(), DRAFT, _packet(), str(out))
+    data = out.read_bytes()
+    assert data.startswith(b"%PDF")
+    assert b"/Outlines" in data
 
 
 # --- opinion-PDF embedding (pdfrw) ----------------------------------------- #
