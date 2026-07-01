@@ -35,3 +35,13 @@ def test_fabricated_statute_url_offline():
     classes = {h["url"].rsplit("/", 1)[-1]: h["class"] for h in rep["urls"]}
     assert classes["title18-Csec3-401.html"] == "known"
     assert classes["title18-Csec99-999.html"] == "fabricated"
+
+
+def test_report_flags_generic_legal_citations_for_manual_review():
+    rep = scan.report(
+        "Opposing counsel relies on 42 U.S.C. § 1983, Fed. R. Civ. P. 56, "
+        "and 410 U.S. 113.", A)
+    assert "42 U.S.C. § 1983" in rep["unclassified_citations"]
+    assert "Fed. R. Civ. P. 56" in rep["unclassified_citations"]
+    assert "410 U.S. 113" in rep["unclassified_citations"]
+    assert all(h["review_required"] for h in rep["generic_hits"])

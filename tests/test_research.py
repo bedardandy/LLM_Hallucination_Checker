@@ -69,3 +69,14 @@ def test_treatment_authorities_get_internal_anchor():
     assert auth["anchor"] == by["18-C §3-108"]["anchor"]
     assert by["2000 ME 17"]["treatment"]["status"] == "caution"
     assert pkt["counts"]["treated"] == 1
+
+
+def test_rendered_markdown_includes_adversarial_review_checklist():
+    from hallucheck import embed
+
+    pkt = research.build_packet(
+        _adapter(), cites=["18-C §3-108"],
+        draft="18-C §3-108 always bars any probate proceeding.", fetch_text=False)
+    md = embed.to_markdown(pkt)
+    assert "Adversarial review checklist" in md
+    assert "Legislative-history searches" in md

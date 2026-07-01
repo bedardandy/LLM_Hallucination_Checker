@@ -9,6 +9,8 @@
                             --format pdf --out authorities.pdf
     hallucheck verify       receipt.json --input draft.txt
     hallucheck verify-log   inspection_log.jsonl
+    hallucheck challenge    --adapter maine --cite "2000 ME 17" --claim "..."
+    hallucheck annotate-docx --adapter maine --in brief.docx --out reviewed.docx
 """
 from __future__ import annotations
 
@@ -34,9 +36,9 @@ from . import (
 
 
 def _read(path_or_dash: str | None) -> str:
-    if not path_or_dash or path_or_dash == "-":
-        return sys.stdin.read()
-    return pathlib.Path(path_or_dash).read_text(encoding="utf-8")
+    from .documents import read_document
+
+    return read_document(path_or_dash)
 
 
 def _inspect_result(adapter, scope, text, samples=1):
@@ -63,6 +65,8 @@ def main(argv=None) -> int:
         if name == "inspect":
             sp.add_argument("--attest", action="store_true")
             sp.add_argument("--log")
+            sp.add_argument("--source", action="append", default=[],
+                            help="bind a source/evidence file hash into the attestation (repeatable)")
             sp.add_argument("--samples", type=int, default=1,
                             help="run the inspector N times and take a fail-biased consensus")
         if name == "links":
@@ -124,6 +128,25 @@ def main(argv=None) -> int:
     cf.add_argument("--cite", action="append", default=[],
                     help="a citation expected to resolve (repeatable)")
 
+
+
+    ad = sub.add_parser("annotate-docx")
+    ad.add_argument("--adapter", required=True)
+    ad.add_argument("--in", dest="input", required=True, help="input DOCX file")
+    ad.add_argument("--out", required=True, help="output DOCX file")
+    ad.add_argument("--scope")
+    ad.add_argument("--author", default="hallucheck")
+    ad.add_argument("--json", action="store_true")
+
+    ch = sub.add_parser("challenge")
+    ch.add_argument("--adapter", required=True)
+    ch.add_argument("--cite", required=True)
+    ch.add_argument("--claim", help="specific assertion/use of the authority")
+    ch.add_argument("--draft", help="document containing the authority use (file or '-')")
+    ch.add_argument("--scope")
+    ch.add_argument("--no-fetch", action="store_true")
+    ch.add_argument("--json", action="store_true")
+
     cl = sub.add_parser("cl-lookup")
     cl.add_argument("--cite", required=True)
     cl.add_argument("--citing", type=int, default=0, metavar="N",
@@ -131,13 +154,16 @@ def main(argv=None) -> int:
     cl.add_argument("--json", action="store_true")
 
     v = sub.add_parser("verify"); v.add_argument("receipt"); v.add_argument("--input")
+    v.add_argument("--source", action="append", default=[],
+                   help="verify bound source/evidence file hashes (repeatable)")
     vl = sub.add_parser("verify-log"); vl.add_argument("log")
     a = ap.parse_args(argv)
 
     if a.cmd == "verify":
         signed = json.loads(pathlib.Path(a.receipt).read_text(encoding="utf-8"))
         intext = _read(a.input) if a.input else None
-        ok, detail = attest.verify_receipt(signed, input_text=intext)
+        ok, detail = attest.verify_receipt(
+            signed, input_text=intext, sources=a.source if a.source else None)
         print(f"{'OK' if ok else 'FAIL'} — {detail}")
         return 0 if ok else 1
     if a.cmd == "verify-log":
@@ -167,6 +193,45 @@ def main(argv=None) -> int:
         return 0 if res.get("found") else 1
 
     adapter = _adapter.load(a.adapter)
+
+
+    if a.cmd == "annotate-docx":
+        from . import docx_comments
+
+        result = docx_comments.annotate_docx(
+            a.input, a.out, adapter, scope=a.scope, author=a.author)
+        if a.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"annotated {result['comments_added']} citation(s) -> {result['output']}")
+            for rec in result["citations"]:
+                print(f"  - {rec['cite']} ({rec['class']})")
+        return 0 if result["comments_added"] else 1
+
+    if a.cmd == "challenge":
+        claim_text = a.claim or (_read(a.draft) if a.draft else "")
+        packet = research.build_packet(adapter, cites=[a.cite], draft=claim_text or None,
+                                       scope=a.scope, fetch_text=not a.no_fetch)
+        entry = next((e for e in packet["entries"] if e["cite"] == a.cite), packet["entries"][0])
+        result = entry["challenge"]
+        if a.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"challenge review for {result.get('cite')}")
+            for w in result.get("warnings", []):
+                print(f"  WARNING {w['kind']}: {w['message']}")
+            print("  adversarial questions:")
+            for q in result.get("adversarial_questions", []):
+                print(f"    - {q}")
+            if result.get("counter_treatment_queries"):
+                print("  counter-treatment searches:")
+                for q in result["counter_treatment_queries"][:8]:
+                    print(f"    - {q}")
+            if result.get("legislative_history_queries"):
+                print("  legislative-history searches:")
+                for q in result["legislative_history_queries"][:8]:
+                    print(f"    - {q}")
+        return 1 if result.get("warnings") else 0
 
     if a.cmd == "emit-prompt":
         print(inspector.draft_system_prompt(adapter.build_vocabulary(a.scope)))
@@ -279,13 +344,15 @@ def main(argv=None) -> int:
         rep = scan.report(text, adapter, scope=a.scope)
         print(json.dumps(rep, indent=2, ensure_ascii=False) if a.json else
               f"leaked={rep['leaked']} unresolvable={rep['unresolvable']} "
-              f"fabricated_urls={rep['fabricated_urls']}")
-        return 1 if (rep["leaked"] or rep["unresolvable"] or rep["fabricated_urls"]) else 0
+              f"fabricated_urls={rep['fabricated_urls']} "
+              f"unclassified_citations={rep['unclassified_citations']}")
+        return 1 if (rep["leaked"] or rep["unresolvable"] or rep["fabricated_urls"]
+                     or rep["unclassified_citations"]) else 0
 
     res = _inspect_result(adapter, a.scope, text, samples=getattr(a, "samples", 1))
     if a.attest or a.log:
         res["attestation"] = attest.record_inspection(
-            text, res, config_digest=_safe_digest(adapter), log_path=a.log)
+            text, res, config_digest=_safe_digest(adapter), log_path=a.log, sources=a.source)
     print(json.dumps(res, indent=2, ensure_ascii=False) if a.json else _scorecard(res))
     return 1 if attest.needs_review(res) else 0
 
@@ -305,7 +372,8 @@ def _scorecard(res: dict) -> str:
     for label, vals in (("INVENTED", res.get("invented")), ("DEAD LINK", res.get("dead_links")),
                         ("LEAKED", scan_rep.get("leaked")),
                         ("UNRESOLVABLE", scan_rep.get("unresolvable")),
-                        ("FABRICATED URL", scan_rep.get("fabricated_urls"))):
+                        ("FABRICATED URL", scan_rep.get("fabricated_urls")),
+                        ("UNCLASSIFIED", scan_rep.get("unclassified_citations"))):
         if vals:
             lines.append(f"  {label}: {', '.join(vals)}")
     for v in res.get("verdicts", []):

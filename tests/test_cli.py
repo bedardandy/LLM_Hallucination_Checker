@@ -52,3 +52,52 @@ def test_verify_log_missing(capsys):
 def test_unknown_command_errors():
     with pytest.raises(SystemExit):
         cli.main(["nope"])
+
+
+def test_verify_receipt_with_bound_source(tmp_path, capsys):
+    from hallucheck import attest
+
+    draft = tmp_path / "draft.txt"
+    source = tmp_path / "source.txt"
+    receipt = tmp_path / "receipt.json"
+    draft.write_text("draft", encoding="utf-8")
+    source.write_text("source", encoding="utf-8")
+    signed = attest.sign_receipt(attest.make_receipt("draft", {"ok": True}, sources=[source]))
+    receipt.write_text(json.dumps(signed), encoding="utf-8")
+
+    assert cli.main(["verify", str(receipt), "--input", str(draft), "--source", str(source)]) == 0
+    assert "OK" in capsys.readouterr().out
+
+    source.write_text("tampered", encoding="utf-8")
+    assert cli.main(["verify", str(receipt), "--input", str(draft), "--source", str(source)]) == 1
+    assert "FAIL" in capsys.readouterr().out
+
+
+def test_scan_reads_html_documents(tmp_path, capsys):
+    draft = tmp_path / "opposition.html"
+    draft.write_text("<p>Opposition cites <b>42 U.S.C. § 1983</b>.</p>", encoding="utf-8")
+    rc = cli.main(["scan", "--adapter", "maine", "--draft", str(draft)])
+    assert rc == 1
+    assert "42 U.S.C." in capsys.readouterr().out
+
+
+def test_challenge_cli_outputs_adversarial_questions(capsys):
+    rc = cli.main(["challenge", "--adapter", "maine", "--cite", "2000 ME 17",
+                   "--claim", "Kruzynski always controls late probate petitions.",
+                   "--no-fetch"])
+    out = capsys.readouterr().out
+    assert rc in (0, 1)
+    assert "adversarial questions" in out
+    assert "counter-treatment searches" in out
+
+
+def test_annotate_docx_cli_adds_review_comments(tmp_path, capsys):
+    from tests.test_docx_comments import _minimal_docx
+
+    src = tmp_path / "brief.docx"
+    out = tmp_path / "annotated.docx"
+    _minimal_docx(src, "See 18-C §3-108.")
+    rc = cli.main(["annotate-docx", "--adapter", "maine", "--in", str(src), "--out", str(out)])
+    assert rc == 0
+    assert out.exists()
+    assert "annotated" in capsys.readouterr().out
