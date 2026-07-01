@@ -23,6 +23,9 @@ def _reason(scan_rep: dict, result: dict) -> str:
         bits.append(f"citations outside the allowed scope: {', '.join(scan_rep['out_of_vocab'])}")
     if scan_rep.get("fabricated_urls"):
         bits.append(f"fabricated/placeholder URLs: {', '.join(scan_rep['fabricated_urls'])}")
+    if scan_rep.get("unclassified_citations"):
+        bits.append("citations needing a trusted adapter or manual review: "
+                    f"{', '.join(scan_rep['unclassified_citations'])}")
     if result.get("invented"):
         bits.append(f"invented placeholder cites: {', '.join(result['invented'])}")
     if result.get("dead_links"):
@@ -56,7 +59,7 @@ def evaluate(text: str, adapter, *, scope: str | None = None, llm: bool = False,
         result["scope"] = scope
 
     block = bool(scan_rep.get("unresolvable") or scan_rep.get("out_of_vocab")
-                 or scan_rep.get("fabricated_urls"))
+                 or scan_rep.get("fabricated_urls") or scan_rep.get("unclassified_citations"))
     if require_protocol:
         block = block or bool(scan_rep.get("leaked"))
     if llm:
