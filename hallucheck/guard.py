@@ -4,8 +4,9 @@
 whether to *block*: it fires on a leaked cite (outside the ``[[REF:]]`` protocol),
 an unresolvable cite, or a fabricated URL. Offline by default — no LLM, no
 network — which is what you want in a blocking hook. With ``llm=True`` it also runs
-the inspector so a mischaracterization (``fail``), ``invented``, or ``dead_link``
-contributes. Every evaluation is attested.
+the inspector so a mischaracterization (``fail``), ``invented``, ``unresolved``
+(source unfetchable, so never inspected), or ``dead_link`` contributes — matching
+what ``attest.needs_review`` counts. Every evaluation is attested.
 """
 from __future__ import annotations
 
@@ -25,6 +26,9 @@ def _reason(scan_rep: dict, result: dict) -> str:
         bits.append(f"fabricated/placeholder URLs: {', '.join(scan_rep['fabricated_urls'])}")
     if result.get("invented"):
         bits.append(f"invented placeholder cites: {', '.join(result['invented'])}")
+    if result.get("unresolved"):
+        bits.append("cites whose source could not be fetched for inspection "
+                    f"(unverified): {', '.join(result['unresolved'])}")
     if result.get("dead_links"):
         bits.append(f"dead authority links: {', '.join(result['dead_links'])}")
     if (result.get("summary") or {}).get("fail"):
@@ -61,7 +65,12 @@ def evaluate(text: str, adapter, *, scope: str | None = None, llm: bool = False,
         block = block or bool(scan_rep.get("leaked"))
     if llm:
         s = result.get("summary") or {}
+        # Fail-closed: an ``unresolved`` cite (source fetch 403'd/timed out) was
+        # never substituted and never inspected — same fail-closed treatment as a
+        # dead link. ``attest.needs_review`` already counts it; the blocking gate
+        # must agree so a transient unreachability can't be weaponized into a pass.
         block = block or s.get("fail", 0) > 0 or bool(result.get("invented")) \
+            or bool(result.get("unresolved")) \
             or bool(result.get("dead_links"))
 
     out = {"block": block, "reason": _reason(scan_rep, result) if block else "",
