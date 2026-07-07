@@ -4,8 +4,10 @@ Point a harness's ``base_url`` at this proxy; it forwards
 ``/v1/chat/completions`` upstream, runs the guard over the assistant message,
 attaches the result + a signed attestation under ``x_hallucheck``, and — with
 ``$PROXY_FAIL_CLOSED=1`` — replaces a failing message with a refusal. This is the
-provider-agnostic injection point for harnesses without hooks. Reference
-implementation: non-streaming (``stream:true`` is forwarded unverified).
+provider-agnostic injection point for harnesses without hooks. Streamed
+completions can't be inspected before the client sees them: under
+``$PROXY_FAIL_CLOSED=1`` a ``stream:true`` request is *refused* (400, retry with
+``stream:false``); otherwise it is forwarded unverified (documented gap).
 
     UPSTREAM_BASE_URL=https://api.example/v1 PROXY_FAIL_CLOSED=1 \\
         python3 -m hallucheck.proxy --adapter maine --port 8099
@@ -87,6 +89,18 @@ def make_handler(adapter, *, scope=None, llm=False):
                 req = json.loads(raw)
             except Exception:
                 return self._send(400, b'{"error":"invalid JSON"}')
+            # Fail-closed: a streamed completion is forwarded token-by-token and
+            # cannot be inspected before the client sees it, so under
+            # $PROXY_FAIL_CLOSED we refuse rather than forward it unverified.
+            # Refuse *before* contacting upstream (don't leak an unverifiable
+            # completion). Callers must retry with stream:false.
+            if req.get("stream") and FAIL_CLOSED:
+                return self._send(400, json.dumps({"error": {
+                    "message": ("hallucheck proxy is fail-closed (PROXY_FAIL_CLOSED=1)"
+                                " and cannot verify streamed completions; retry with"
+                                ' "stream": false.'),
+                    "type": "hallucheck_stream_unverifiable",
+                    "code": "stream_not_allowed"}}).encode())
             fwd = urllib.request.Request(UPSTREAM.rstrip("/") + "/chat/completions",
                                          data=raw, method="POST",
                                          headers={"Content-Type": "application/json"})
@@ -98,7 +112,9 @@ def make_handler(adapter, *, scope=None, llm=False):
             except Exception as e:
                 return self._send(502, json.dumps({"error": f"upstream: {e}"}).encode())
             if req.get("stream"):
-                return self._send(200, upstream)        # not inspected (reference)
+                # Reached only when not fail-closed (fail-closed refuses above):
+                # forwarded unverified — documented gap.
+                return self._send(200, upstream)
             try:
                 body = apply_guard(json.loads(upstream), adapter,
                                    scope=self.headers.get("X-Hallucheck-Scope") or scope,

@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import sys
 import threading
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -152,12 +153,13 @@ def test_proxy_passes_clean_completion(monkeypatch):
     assert body["choices"][0]["message"]["content"].startswith("I prepared")
 
 
-def test_proxy_streaming_is_passthrough_documented_gap(monkeypatch):
-    # Known limitation: stream:true is forwarded unverified (no x_hallucheck).
+def test_proxy_streaming_is_passthrough_when_not_fail_closed(monkeypatch):
+    # Documented gap only when NOT fail-closed: stream:true forwarded unverified.
     from adapters.maine.adapter import MaineProbateAdapter
     from hallucheck import proxy
     up, up_port = _serve(_upstream_returning("streamed 18-C §9-999"))
     monkeypatch.setattr(proxy, "UPSTREAM", f"http://127.0.0.1:{up_port}/v1")
+    monkeypatch.setattr(proxy, "FAIL_CLOSED", False)
     px, px_port = _serve(proxy.make_handler(MaineProbateAdapter()))
     try:
         body = _post(px_port, {"model": "m", "stream": True,
@@ -165,6 +167,30 @@ def test_proxy_streaming_is_passthrough_documented_gap(monkeypatch):
     finally:
         up.shutdown(); px.shutdown()
     assert "x_hallucheck" not in body
+
+
+def test_proxy_streaming_refused_when_fail_closed(monkeypatch):
+    # Fail-closed: a streamed completion can't be inspected -> refuse (400),
+    # instruct the caller to retry with stream:false. Must NOT forward unverified.
+    from adapters.maine.adapter import MaineProbateAdapter
+    from hallucheck import proxy
+    up, up_port = _serve(_upstream_returning("streamed 18-C §9-999"))
+    monkeypatch.setattr(proxy, "UPSTREAM", f"http://127.0.0.1:{up_port}/v1")
+    monkeypatch.setattr(proxy, "FAIL_CLOSED", True)
+    px, px_port = _serve(proxy.make_handler(MaineProbateAdapter()))
+    err = None
+    try:
+        try:
+            _post(px_port, {"model": "m", "stream": True,
+                            "messages": [{"role": "user", "content": "hi"}]})
+        except urllib.error.HTTPError as e:
+            err = e
+    finally:
+        up.shutdown(); px.shutdown()
+    assert err is not None and err.code == 400
+    payload = json.loads(err.read())
+    assert payload["error"]["type"] == "hallucheck_stream_unverifiable"
+    assert "stream" in payload["error"]["message"].lower()
 
 
 # ------------------------------------------------------------------- guard API
