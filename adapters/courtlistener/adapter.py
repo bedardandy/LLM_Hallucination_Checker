@@ -90,6 +90,10 @@ class CourtListenerCaselawAdapter:
 
     # --- vocabulary (network: confirms each seed resolves) ------------------ #
     def build_vocabulary(self, scope=None) -> dict:
+        """Confirm each seed cite resolves in CourtListener (NETWORK). This is the
+        explicit *prime* step: it populates ``self._cache`` (via :meth:`resolve`)
+        so a later offline :meth:`citation_spans` can mark in-scope membership
+        without touching the network."""
         vocab: dict[str, dict] = {}
         for cite in self._scope_cites(scope):
             r = self.resolve(cite, fetch_text=False)
@@ -98,10 +102,20 @@ class CourtListenerCaselawAdapter:
                                "title": r.get("title"), "url": r.get("url")}
         return vocab
 
+    def _cached_vocabulary(self, scope) -> set[str]:
+        """Offline scope vocabulary: the ``scope`` cites already confirmed to
+        resolve by a prior explicit :meth:`resolve` / :meth:`build_vocabulary`
+        call (recorded in ``self._cache``). NEVER touches the network — the
+        scanner must stay offline and fail-closed (safe in a blocking hook)."""
+        return {cite for cite in self._scope_cites(scope) if self._cache.get(cite)}
+
     # --- deterministic scanner (offline) ----------------------------------- #
     def citation_spans(self, text: str, *, scope=None) -> list[dict]:
         text = clean(text or "")
-        vocab = set(self.build_vocabulary(scope)) if scope else None
+        # Offline only: membership comes from the already-resolved cache (primed
+        # by an explicit build_vocabulary()/resolve() step), NOT a network lookup
+        # during the scan. An unprimed scope simply yields no in-scope members.
+        vocab = self._cached_vocabulary(scope) if scope else None
         hits: list = []
         taken: list = []
 

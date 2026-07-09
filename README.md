@@ -193,6 +193,16 @@ of valid cites is no longer a fixed list you control, and existence is confirmed
 over the network at resolve-time (not offline). A match is a lead to read, not a
 verified citation.
 
+> **Behavior note (offline scanning).** The deterministic scanner
+> (`citation_spans` / `hallucheck.scan`) is **offline and never resolves over the
+> network** — that is what makes it safe in a blocking hook. In-scope membership is
+> read from the cache **primed** by an explicit `build_vocabulary()` / `resolve()`
+> step (which `hallucheck pack` performs for you). **Migration:** a scoped scan that
+> was *not* primed no longer silently resolves cites over the network during the
+> scan; unprimed in-scope cites are reported with `in_vocab: False` (membership
+> unknown) rather than network-confirmed. Prime first (e.g. `pack`, or call
+> `build_vocabulary(scope)`) to get `in_vocab: True` markings offline.
+
 ## Write your own adapter
 
 Implement `hallucheck.adapter.Adapter`: `build_vocabulary`, `resolve`,
