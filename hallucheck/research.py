@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import datetime
 
-from . import attest, courtlistener, sources
+from . import attest, challenge, courtlistener, sources
 from .disclaimer import LIBRARY_DISCLAIMER, combined
 from .textnorm import clean
 
@@ -155,6 +155,8 @@ def build_packet(adapter, *, cites: list[str] | None = None, draft: str | None =
 
     entries = [_entry(adapter, c, metas[c], fetch_text=fetch_text, treatments=treatments)
                for c in order]
+    for e in entries:
+        e["challenge"] = challenge.analyze_authority_use(e, draft=draft)
     _relate(entries)
 
     # A treatment can cite another authority in the packet (e.g. the case that

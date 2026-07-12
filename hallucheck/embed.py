@@ -148,12 +148,31 @@ def to_markdown(packet: dict, *, prologue: str = "") -> str:
                  + (f" — reviewed by {t['reviewed_by']}" if t.get("reviewed_by") else ""))
         for a in t.get("authorities", []):
             L.append(f"  - see {_md_treat_auth(a)}")
+        L += _md_challenge(e.get("challenge") or {})
         if e["related"]:
             L.append("**Related authorities:** "
                      + ", ".join(f"[{r['cite']}](#{r['anchor']})" for r in e["related"]))
         L.append("")
     return "\n".join(L).rstrip() + "\n"
 
+
+
+
+def _md_challenge(ch: dict) -> list[str]:
+    if not ch:
+        return []
+    rows = ["**Adversarial review checklist:**"]
+    for w in ch.get("warnings", []):
+        rows.append(f"  - ⚠️ {w.get('kind')}: {w.get('message')}")
+    for q in ch.get("adversarial_questions", [])[:4]:
+        rows.append(f"  - {q}")
+    queries = (ch.get("counter_treatment_queries") or [])[:3]
+    if queries:
+        rows.append("  - Counter-treatment searches: " + "; ".join(f"`{q}`" for q in queries))
+    hist = (ch.get("legislative_history_queries") or [])[:3]
+    if hist:
+        rows.append("  - Legislative-history searches: " + "; ".join(f"`{q}`" for q in hist))
+    return rows
 
 def _md_treat_auth(a: dict) -> str:
     label = a.get("label") or a.get("cite") or a.get("url") or "authority"
@@ -272,6 +291,7 @@ def to_html(packet: dict, *, prologue: str = "") -> str:
         if auths:
             treat += "<ul>" + "".join(f"<li>see {_html_treat_auth(a)}</li>" for a in auths) + "</ul>"
         out.append(treat + "</div>")
+        out.append(_html_challenge(e.get("challenge") or {}))
         if e["related"]:
             out.append("<p><b>Related authorities:</b> " + ", ".join(
                 f'<a href="#{_h(r["anchor"])}">{_h(r["cite"])}</a>' for r in e["related"]) + "</p>")
@@ -279,6 +299,26 @@ def to_html(packet: dict, *, prologue: str = "") -> str:
     out.append("</body></html>")
     return "".join(out)
 
+
+
+
+def _html_challenge(ch: dict) -> str:
+    if not ch:
+        return ""
+    items = []
+    for w in ch.get("warnings", []):
+        items.append(f'<li><b>⚠️ {_h(w.get("kind"))}</b>: {_h(w.get("message"))}</li>')
+    for q in (ch.get("adversarial_questions") or [])[:4]:
+        items.append(f"<li>{_h(q)}</li>")
+    queries = (ch.get("counter_treatment_queries") or [])[:3]
+    if queries:
+        items.append("<li>Counter-treatment searches: "
+                     + "; ".join(f"<code>{_h(q)}</code>" for q in queries) + "</li>")
+    hist = (ch.get("legislative_history_queries") or [])[:3]
+    if hist:
+        items.append("<li>Legislative-history searches: "
+                     + "; ".join(f"<code>{_h(q)}</code>" for q in hist) + "</li>")
+    return '<div class="treat"><b>Adversarial review checklist:</b><ul>' + "".join(items) + "</ul></div>"
 
 def _html_treat_auth(a: dict) -> str:
     label = a.get("label") or a.get("cite") or a.get("url") or "authority"
